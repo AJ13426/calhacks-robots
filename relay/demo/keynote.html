@@ -1,0 +1,635 @@
+<title>Relay</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full bleed 3D floor. Copy column top left, set like an engineering drawing note: slide number and a hairline rule, a plain headline, one supporting line, one control. Quiet footer rail. One light theme, one accent (Relay green). */
+:root{
+  --paper:#E9ECEE; --ink:#121518; --muted:#535C63; --soft:#7F888F; --rule:rgba(18,21,24,.16);
+  --relay:#12805C; --embed:#2C6FB7; --lang:#8A9096; --bad:#C8392B; --amber:#D99A2B; --steel:#3D6E99;
+  --font:"Instrument Sans", "Helvetica Neue", Arial, sans-serif; --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;overflow:hidden;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#tags{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.tag{position:absolute;transform:translate(-50%,-100%);font-size:12px;font-weight:600;white-space:nowrap;padding:3px 7px;background:#FAFAF9;color:var(--ink);border:1px solid var(--rule);transition:opacity .3s}
+.tag.off{opacity:0}
+.tag.bad{background:var(--bad);color:#fff;border-color:var(--bad)}.tag.good{background:var(--relay);color:#fff;border-color:var(--relay)}
+.tag.code{font-family:var(--mono);font-weight:400;font-size:11px}
+.tag.say{white-space:normal;width:210px;font-weight:500;line-height:1.35;padding:6px 8px}
+.tag.status{white-space:normal;width:160px;font-weight:500;line-height:1.3;padding:5px 8px;transform:translate(-50%,-115%)}
+.tag.status b{display:block;font-size:11px}
+.tag.belief{font-family:var(--mono);font-weight:500;font-size:11px}
+.tag.belief.wrong{border-color:var(--bad);color:var(--bad)}.tag.belief.right{border-color:var(--relay);color:var(--relay)}
+
+#copy{position:fixed;left:max(48px, env(safe-area-inset-left,0px));top:calc(40px + env(safe-area-inset-top,0px));width:min(540px,42vw);display:flex;flex-direction:column;gap:16px;max-height:calc(100% - 140px);overflow:auto;padding-right:4px}
+#copy > *{animation:rise .55s cubic-bezier(.2,.7,.2,1) both}
+#copy > *:nth-child(2){animation-delay:.06s}#copy > *:nth-child(3){animation-delay:.12s}#copy > *:nth-child(4){animation-delay:.18s}#copy > *:nth-child(5){animation-delay:.24s}#copy > *:nth-child(6){animation-delay:.3s}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.no{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--soft);border-top:1.5px solid var(--ink);padding-top:8px}
+h1{margin:0;font-size:clamp(34px,3.6vw,54px);font-weight:600;line-height:1.04;letter-spacing:-.02em;text-wrap:balance}
+.sub{margin:0;font-size:clamp(16px,1.35vw,19px);line-height:1.45;color:var(--muted);max-width:40ch}
+.sub b{color:var(--ink);font-weight:600}
+.fig{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.fig .n{font-size:clamp(48px,5vw,76px);font-weight:600;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.fig .l{font-size:15px;color:var(--ink);max-width:24ch;line-height:1.35}
+.src{font-size:12px;color:var(--soft)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;border-top:1px solid var(--rule);padding-top:14px}
+.cols h3{margin:0 0 6px;font-size:16px;font-weight:600}.cols p{margin:0;font-size:15px;line-height:1.45;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font-family:var(--font);font-size:15px;font-weight:600;cursor:pointer;border-radius:0;padding:9px 16px;border:1.5px solid var(--ink);background:var(--ink);color:#FAFAF9}
+button.ghost{background:transparent;color:var(--ink)}
+button.go{background:var(--relay);border-color:var(--relay)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--relay);outline-offset:2px}
+pre{margin:0;font-family:var(--mono);font-size:12px;line-height:1.55;background:rgba(250,250,249,.88);border-left:2px solid var(--relay);padding:10px 12px;overflow-x:auto;white-space:pre;color:#2A3036}
+pre .c{color:var(--soft)}pre .k{color:var(--relay)}
+/* VLA anatomy */
+.vla{display:grid;grid-template-columns:1fr 150px;gap:6px 14px;align-items:center}
+.vla .box{border:1.5px solid var(--ink);background:rgba(250,250,249,.9);padding:7px 10px;font-size:14px;font-weight:600;position:relative}
+.vla .box small{display:block;font-weight:400;color:var(--muted);font-size:12.5px}
+.vla .box.ins{border-style:dashed;font-weight:500}
+.vla .arrow{height:12px;border-left:1.5px solid var(--ink);margin-left:20px}
+.vla .tap{display:flex;align-items:center;gap:8px;background:transparent;border:1.5px solid var(--rule);color:var(--ink);padding:7px 9px;font-size:13.5px;text-align:left}
+.vla .tap i{width:10px;height:10px;display:block;flex:none}
+.vla .tap[aria-pressed="true"]{border-color:var(--ink);background:rgba(250,250,249,.9)}
+.detail{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;border-top:1px solid var(--rule);padding-top:10px}
+.detail span:nth-child(odd){color:var(--soft)}
+/* bars */
+.bars{display:flex;flex-direction:column;gap:12px;width:min(440px,100%)}
+.bar{display:grid;grid-template-columns:90px 1fr 70px;gap:12px;align-items:center;font-size:15px}
+.bar .t{height:14px;background:rgba(18,21,24,.07)}.bar .t i{display:block;height:100%;transition:width .9s cubic-bezier(.2,.7,.2,1)}
+.bar b{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+/* form */
+.form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:500}
+.form input,.form select{font-family:var(--font);font-size:17px;font-weight:600;border:1.5px solid var(--rule);border-radius:0;background:rgba(250,250,249,.92);padding:7px 9px;width:100%;color:var(--ink)}
+.form .wide{grid-column:span 4}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13.5px;color:var(--muted)}.legend span{display:flex;align-items:center;gap:7px}.legend i{width:20px;height:3px;display:block}
+/* crews */
+.crews{display:flex;gap:8px;flex-wrap:wrap}
+.crews button{background:transparent;color:var(--ink);border-color:var(--rule);display:flex;align-items:center;gap:8px;padding:8px 12px}
+.crews button i{width:10px;height:10px;display:block}
+.crews button[aria-pressed="true"]{border-color:var(--ink);background:rgba(250,250,249,.9)}
+.roster{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.roster button{font-size:12.5px;padding:6px 6px;background:rgba(250,250,249,.9);color:var(--ink);border:1.5px solid var(--rule);border-left-width:5px;text-align:left}
+.links{font-size:13.5px;line-height:1.5;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.links b{color:var(--ink);font-weight:600}
+/* phone */
+.phone{width:250px;border:2px solid var(--ink);border-radius:26px;background:#FAFAF9;padding:14px 12px 16px;display:flex;flex-direction:column;gap:8px;box-shadow:0 18px 40px -20px rgba(0,0,0,.35)}
+.phone .top{display:flex;justify-content:space-between;font-size:12px;font-weight:600}
+.phone .top span:last-child{color:var(--relay)}
+.phone .alert{background:var(--bad);color:#fff;font-size:12px;padding:6px 8px;line-height:1.3}
+.phone .alert[hidden]{display:none}
+.phone .r{display:grid;grid-template-columns:8px 1fr;gap:8px;font-size:12.5px;line-height:1.3;border-top:1px solid var(--rule);padding-top:7px}
+.phone .r i{width:8px;height:8px;margin-top:4px}.phone .r b{font-weight:600}.phone .r span{color:var(--muted)}
+.road{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--rule);padding-top:12px}
+.road div{display:grid;grid-template-columns:90px 1fr;gap:14px;align-items:baseline}
+.road small{font-family:var(--mono);font-size:11.5px;color:var(--relay)}.road b{font-size:17px;font-weight:600}
+
+#score{position:fixed;right:max(40px, env(safe-area-inset-right,0px));top:calc(40px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;gap:14px;align-items:flex-end;text-align:right;border-top:1.5px solid var(--ink);padding-top:8px}
+#score .m{display:flex;flex-direction:column;align-items:flex-end}
+#score .v{font-size:36px;font-weight:600;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+#score .k{font-size:12.5px;color:var(--muted)}
+#score .p{font-family:var(--mono);font-size:11.5px;color:var(--soft)}
+#score .v.bad{color:var(--bad)}#score .v.ok{color:var(--relay)}
+
+#bar{position:fixed;left:max(48px, env(safe-area-inset-left,0px));right:max(48px, env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:18px}
+#sec{font-size:13px;font-weight:600;min-width:170px}#sec span{font-family:var(--mono);color:var(--soft);font-weight:400;margin-left:8px;font-size:11.5px}
+#prog{flex:1;display:flex;gap:3px;min-width:0}
+#prog button{flex:1;height:3px;padding:0;border:0;background:rgba(18,21,24,.15)}
+#prog button.done{background:rgba(18,21,24,.45)}#prog button.cur{background:var(--ink)}
+#prog .gap{flex:0 0 14px}
+.ctl{display:flex;gap:8px;align-items:center}.ctl button{padding:7px 12px;font-size:13px}
+.ctl select{font-family:var(--font);font-size:13px;border:0;background:transparent;color:var(--muted);font-weight:600}
+#notes{position:fixed;left:max(48px, env(safe-area-inset-left,0px));bottom:calc(64px + env(safe-area-inset-bottom,0px));width:min(720px,calc(100% - 96px));background:#15181B;color:#E6E9EB;padding:14px 18px;font-size:15px;line-height:1.5}
+#notes[hidden]{display:none!important}
+#insp{position:fixed;right:0;top:0;bottom:0;width:min(380px,100vw);background:#FAFAF9;border-left:1.5px solid var(--ink);display:flex;flex-direction:column;transform:translateX(105%);transition:transform .4s cubic-bezier(.2,.7,.2,1);z-index:5}
+#insp.on{transform:none}
+.ih{display:flex;justify-content:space-between;align-items:center;padding:calc(18px + env(safe-area-inset-top,0px)) max(20px, env(safe-area-inset-right,0px)) 14px 20px;border-bottom:1px solid var(--rule)}
+.ih h3{margin:0;font-size:20px;font-weight:600}
+.ib{overflow:auto;padding:14px max(20px, env(safe-area-inset-right,0px)) 24px 20px;display:flex;flex-direction:column;gap:18px;font-size:14px}
+.ib h4{margin:0 0 6px;font-size:13px;color:var(--muted);font-weight:600}
+.ib table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}.ib td,.ib th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--rule)}.ib th{color:var(--muted);font-weight:500}
+.ib td.bad{color:var(--bad);font-weight:600}.ib td.ok{color:var(--relay);font-weight:600}
+.ib .log{font-family:var(--mono);font-size:11.5px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+#err{position:fixed;left:16px;bottom:60px;max-width:70vw;font-size:12px;color:var(--bad);white-space:pre-wrap;z-index:9}
+@media (max-width:820px){
+  #copy{left:max(18px, env(safe-area-inset-left,0px));right:max(18px, env(safe-area-inset-right,0px));top:calc(16px + env(safe-area-inset-top,0px));width:auto;gap:10px;max-height:52vh;background:rgba(233,236,238,.94);padding:0 0 10px}
+  h1{font-size:28px}.sub{font-size:15px}.fig .n{font-size:44px}.cols{gap:14px}.vla{grid-template-columns:1fr 120px}
+  #score{top:auto;bottom:calc(60px + env(safe-area-inset-bottom,0px));right:max(18px, env(safe-area-inset-right,0px));flex-direction:row;gap:16px;border:0}#score .v{font-size:22px}
+  #bar{left:max(18px, env(safe-area-inset-left,0px));right:max(18px, env(safe-area-inset-right,0px));gap:10px}#sec{min-width:0;font-size:12px}.ctl select{display:none}
+  .phone{width:220px}
+}
+@media (prefers-reduced-motion: reduce){#copy > *{animation:none}}
+</style>
+
+<canvas id="gl"></canvas>
+<div id="tags"></div>
+<section id="copy" aria-live="polite"></section>
+<div id="score" hidden></div>
+<div id="notes" hidden></div>
+<aside id="insp" aria-label="Inspector"><div class="ih"><h3 id="inT">Picker arm</h3><button class="ghost" id="inClose">Close</button></div><div class="ib" id="inBody"></div></aside>
+<div id="bar">
+  <div id="sec">Problem<span>01 / 18</span></div>
+  <div id="prog"></div>
+  <div class="ctl"><select id="spd" aria-label="Simulation speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select>
+    <button class="ghost" id="nBtn">Notes</button><button class="ghost" id="prev" aria-label="Previous slide">←</button><button id="next" aria-label="Next slide">→</button></div>
+</div>
+<div id="err"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+window.addEventListener('error',e=>{document.getElementById('err').textContent='Something broke: '+(e.message||e)});
+(()=>{
+if(!window.THREE){document.getElementById('err').textContent='The 3D library did not load. Check the connection and reload.';return}
+const V3=THREE.Vector3,$=id=>document.getElementById(id),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rand=rng(5);
+const C={paper:0xE9ECEE,ld:0xD99A2B,pk:0x3D6E99,amr:0x3B4248,graph:0x2A2F34,card:0xC9A27A,glass:0xA8D2EC,relay:0x12805C,embed:0x2C6FB7,lang:0x8A9096,bad:0xC8392B,rack:0x5B656E,legged:0x6F6A9E};
+const fmt$=v=>'$'+Math.round(v).toLocaleString('en-US');
+
+// ---------- renderer ----------
+const canvas=$('gl');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(1.75,devicePixelRatio||1));renderer.outputEncoding=THREE.sRGBEncoding;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
+const scene=new THREE.Scene();scene.background=new THREE.Color(C.paper);scene.fog=new THREE.Fog(C.paper,40,90);
+const HALF=2.1,camera=new THREE.OrthographicCamera(-HALF,HALF,HALF,-HALF,.1,140);camera.position.set(10,9,14);
+const controls=THREE.OrbitControls?new THREE.OrbitControls(camera,canvas):null;
+if(controls){controls.enableDamping=true;controls.dampingFactor=.08;controls.minZoom=.35;controls.maxZoom=5;controls.maxPolarAngle=Math.PI*.46;controls.enablePan=false}
+scene.add(new THREE.HemisphereLight(0xffffff,0xc5cbcf,.8));
+const sun=new THREE.DirectionalLight(0xffffff,.85);sun.position.set(5,10,6);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-4.5,right:4.5,top:4.5,bottom:-4.5,near:4,far:24});sun.shadow.bias=-.0002;sun.shadow.normalBias=.02;sun.shadow.radius=2;sun.target.position.set(.4,0,.3);scene.add(sun,sun.target);
+const sun2=new THREE.DirectionalLight(0xffffff,.85);sun2.position.set(31,10,6);sun2.target.position.set(26,0,0);sun2.castShadow=true;sun2.shadow.mapSize.set(2048,2048);
+Object.assign(sun2.shadow.camera,{left:-6.5,right:6.5,top:6.5,bottom:-6.5,near:4,far:24});sun2.shadow.bias=-.0002;sun2.shadow.normalBias=.02;sun2.shadow.radius=2;scene.add(sun2,sun2.target);
+const mat=(c,r=.6,m=.05,extra={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:r,metalness:m},extra));
+function mesh(g,m,cast=true,recv=true){const o=new THREE.Mesh(g,m);o.castShadow=cast;o.receiveShadow=recv;return o}
+function link(o,a,b){const d=new V3().subVectors(b,a),L=d.length();o.position.copy(a).addScaledVector(d,.5);o.scale.set(1,Math.max(.001,L),1);if(L>1e-6)o.quaternion.setFromUnitVectors(new V3(0,1,0),d.divideScalar(L))}
+const box=(w,h,d,m,x,y,z,par)=>{const o=mesh(new THREE.BoxGeometry(w,h,d),typeof m==='number'?mat(m):m);o.position.set(x,y,z);(par||scene).add(o);return o};
+function floorTex(){const c=document.createElement('canvas');c.width=c.height=1024;const x=c.getContext('2d');x.fillStyle='#DDE1E4';x.fillRect(0,0,1024,1024);
+  for(let i=0;i<=40;i++){const p=i*1024/40;x.strokeStyle=i%5?'rgba(0,0,0,.03)':'rgba(0,0,0,.065)';x.lineWidth=i%5?1:1.5;x.beginPath();x.moveTo(p,0);x.lineTo(p,1024);x.moveTo(0,p);x.lineTo(1024,p);x.stroke()}
+  const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t}
+{const far=mesh(new THREE.PlaneGeometry(200,200),mat(0xDDE1E4,1),false,true);far.rotation.x=-Math.PI/2;far.position.y=-.004;scene.add(far)}
+
+// ---------- the line ----------
+const WH=new THREE.Group();scene.add(WH);
+{const g=mesh(new THREE.PlaneGeometry(8,8),new THREE.MeshStandardMaterial({map:floorTex(),roughness:1}),false,true);g.rotation.x=-Math.PI/2;g.position.set(.5,0,.3);WH.add(g);
+ const lane=mat(0xE2BE4E,.8);box(2.2,.004,.05,lane,2.4,.003,.45,WH);box(2.2,.004,.05,lane,2.4,.003,1.45,WH)}
+for(let k=0;k<3;k++){const rx=2.3+k*.75,rz=1.95,pm=mat(C.rack,.55,.35);for(const dx of [-.33,.33])for(const dz of [-.22,.22])box(.04,1.3,.04,pm,rx+dx,.65,rz+dz,WH);
+  for(let l=0;l<4;l++){box(.7,.03,.48,mat(0xC9973A,.6),rx,.08+l*.38,rz,WH);for(let b=0;b<3;b++)if(rand()>.25)box(.17,.15,.2,mat(rand()>.5?C.card:0xb48c62,.85),rx-.22+b*.22,.17+l*.38,rz+(rand()-.5)*.1,WH)}}
+const BELT={x0:-2.4,x1:1.25,z:-.35,y:.48},P={x:.85};
+const btc=document.createElement('canvas');btc.width=64;btc.height=16;{const x=btc.getContext('2d');x.fillStyle='#2E3338';x.fillRect(0,0,64,16);x.fillStyle='#41484F';for(let i=0;i<4;i++)x.fillRect(i*16,0,3,16)}
+const beltTex=new THREE.CanvasTexture(btc);beltTex.wrapS=beltTex.wrapT=THREE.RepeatWrapping;beltTex.repeat.set(24,1);
+{const side=mat(0x2b3035),top=new THREE.MeshStandardMaterial({map:beltTex,roughness:.8}),rail=mat(0x6b747c,.45,.35);
+ const b=mesh(new THREE.BoxGeometry(BELT.x1-BELT.x0,.05,.42),[side,side,top,side,rail,rail]);b.position.set((BELT.x0+BELT.x1)/2,BELT.y-.025,BELT.z);WH.add(b);
+ for(let x=BELT.x0+.15;x<BELT.x1;x+=.6)for(const dz of [-.18,.18])box(.05,BELT.y-.05,.05,rail,x,(BELT.y-.05)/2,BELT.z+dz,WH);
+ box(.5,.32,.4,mat(0x6f7980,.7),-2.75,.16,-1.15,WH);for(let k=0;k<4;k++)box(.15,.14,.15,k%2?mat(C.card,.85):mat(C.glass,.15,0,{transparent:true,opacity:.75}),-2.86+(k%2)*.2,.39,-1.22+Math.floor(k/2)*.17,WH)}
+const zoneMat=new THREE.MeshBasicMaterial({color:C.relay,transparent:true,opacity:0,depthWrite:false});
+const zone=mesh(new THREE.BoxGeometry(.5,.5,.5),zoneMat,false,false);zone.position.set(-.6,BELT.y+.25,BELT.z);WH.add(zone);
+const zoneEdge=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(.5,.5,.5)),new THREE.LineBasicMaterial({color:C.relay,transparent:true,opacity:0}));zoneEdge.position.copy(zone.position);WH.add(zoneEdge);
+function stripe(){const c=document.createElement('canvas');c.width=256;c.height=32;const x=c.getContext('2d');x.fillStyle='#1B1F23';x.fillRect(0,0,256,32);x.fillStyle='#D99A2B';
+  for(let i=-2;i<20;i++){x.beginPath();x.moveTo(i*20,32);x.lineTo(i*20+10,0);x.lineTo(i*20+20,0);x.lineTo(i*20+10,32);x.fill()}return new THREE.CanvasTexture(c)}
+class Arm{constructor(id,color,base,rest,par){Object.assign(this,{id,base:base.clone(),L:.5,t:rest.clone(),rest:rest.clone(),open:.6,tool:new V3(),yaw:0,status:'idle',flash:0});par=par||scene;
+    const body=mat(color,.45,.1),dark=mat(C.graph,.7);this.body=body;this.parts=[];const add=o=>{par.add(o);this.parts.push(o);return o};
+    add(box(.36,.12,.36,dark,base.x,.06,base.z,par));const col=add(mesh(new THREE.CylinderGeometry(.09,.11,.3,20),body));col.position.set(base.x,.27,base.z);
+    this.s1=add(mesh(new THREE.BoxGeometry(.07,1,.07),body));this.s2=add(mesh(new THREE.BoxGeometry(.055,1,.055),body));this.j=add(mesh(new THREE.SphereGeometry(.055,16,12),dark));
+    this.f=[0,1].map(()=>add(mesh(new THREE.BoxGeometry(.025,.08,.09),dark)))}
+  update(){const sh=new V3(this.base.x,.45,this.base.z),dx=this.t.x-sh.x,dz=this.t.z-sh.z,h=Math.hypot(dx,dz),yaw=Math.atan2(dz,dx),v=this.t.y-sh.y,L=this.L;
+    const d=clamp(Math.hypot(h,v),.15,2*L-.005),b=Math.atan2(v,h),a=b+Math.acos(clamp(d/(2*L),-1,1));const dir=new V3(Math.cos(yaw),0,Math.sin(yaw));
+    const el=sh.clone().addScaledVector(dir,Math.cos(a)*L);el.y=sh.y+Math.sin(a)*L;const tip=sh.clone().addScaledVector(dir,Math.cos(b)*d);tip.y=sh.y+Math.sin(b)*d;
+    link(this.s1,sh,el);link(this.s2,el,tip);this.j.position.copy(el);this.tool.copy(tip);this.yaw=yaw;const side=new V3(-dir.z,0,dir.x),o=.05+this.open*.05;
+    this.f.forEach((f,k)=>{f.position.copy(tip).addScaledVector(side,k?o:-o);f.position.y-=.05;f.rotation.y=-yaw});this.body.emissive.setRGB(this.flash*.7,0,0)}}
+const LD=new Arm('LD-1',C.ld,new V3(-2.35,0,-.95),new V3(-2.35,.85,-.7),WH);
+const PK=new Arm('PK-2',C.pk,new V3(1.15,0,.15),new V3(1.1,.85,.05),WH);
+function makeAMR(par){const g=new THREE.Group();par.add(g);const body=mat(C.amr,.55);const b=mesh(new THREE.BoxGeometry(.52,.16,.4),body);b.position.y=.12;g.add(b);
+  const s=mesh(new THREE.PlaneGeometry(.52,.04),new THREE.MeshStandardMaterial({map:stripe()}),false,false);s.position.set(0,.12,.201);g.add(s);
+  const tote=mesh(new THREE.BoxGeometry(.42,.14,.32),mat(0x3D6E99,.7));tote.position.y=.27;g.add(tote);const inn=mesh(new THREE.BoxGeometry(.38,.13,.28),mat(0x274b6b,.8));inn.position.y=.285;g.add(inn);
+  const wg=new THREE.CylinderGeometry(.05,.05,.04,14);wg.rotateX(Math.PI/2);for(const wx of [-.18,.18])for(const wz of [-.21,.21]){const w=mesh(wg,mat(C.graph,.8));w.position.set(wx,.05,wz);g.add(w)}
+  g.userData.body=body;g.userData.inner=inn;return g}
+const AMR={x:1.6,z:.75,status:'docked'};AMR.g=makeAMR(WH);
+const DOCK={x:1.6,z:.75},RACKP={x:3.05,z:1.15};
+const DBP=new V3(-.2,2.05,-.9),RELP=new V3(-1.6,2.05,-.9);
+function dbIcon(r=.22){const g=new THREE.Group(),m=mat(C.relay,.4,.12);for(let k=0;k<3;k++){const d=mesh(new THREE.CylinderGeometry(r,r,r*.36,48),m);d.position.y=k*r*.46;g.add(d)}return g}
+const dbNode=dbIcon();dbNode.position.copy(DBP);scene.add(dbNode);const dbMast=mesh(new THREE.CylinderGeometry(.012,.012,2,8),mat(0xa3abb1));dbMast.position.set(DBP.x,1,DBP.z);scene.add(dbMast);
+const relayBox=new THREE.Group();relayBox.position.copy(RELP);scene.add(relayBox);{const b=mesh(new THREE.BoxGeometry(.4,.24,.16),mat(0x9aa2a8,.6));b.position.y=.1;relayBox.add(b);
+ const mast=mesh(new THREE.CylinderGeometry(.012,.012,2,8),mat(0xa3abb1));mast.position.y=-1;relayBox.add(mast)}
+function nodes(db,rel){dbNode.visible=dbMast.visible=db;relayBox.visible=rel}
+nodes(false,false);
+const packets=[];const pktGeo=new THREE.BoxGeometry(.035,.035,.035);
+function sendPackets(a,b,c,color,n=6,ms=700){for(let k=0;k<n;k++){const m=mesh(pktGeo,new THREE.MeshBasicMaterial({color}),false,false);m.visible=false;scene.add(m);packets.push({m,a:a.clone(),b:b.clone(),c:c.clone(),t:-k*45,ms})}}
+function card(){const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');x.fillStyle='#FAFAF9';x.fillRect(2,2,252,60);x.strokeStyle='#8A9096';x.lineWidth=3;x.strokeRect(2,2,252,60);
+  x.fillStyle='#121518';x.font='500 26px "Instrument Sans", Arial, sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText('“ sentence ”',128,33);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));s.scale.set(.36,.09,1);s.renderOrder=5;return s}
+function sendCard(a,c,ms){const s=card();scene.add(s);packets.push({m:s,a:a.clone(),b:RELP.clone().add(new V3(0,.12,0)),c:c.clone(),t:0,ms})}
+function clearPackets(){for(const p of packets)scene.remove(p.m);packets.length=0}
+
+// ---------- tags ----------
+const tags=[];
+function tag(html,cls,pos){const el=document.createElement('div');el.className='tag off '+cls;el.innerHTML=html;$('tags').appendChild(el);
+  const T={el,pos,on:false,until:0,set(h){if(el.innerHTML!==h)el.innerHTML=h;return T},cls(c){el.className='tag '+(T.on?'':'off ')+c;return T},show(v=true){T.on=v;el.classList.toggle('off',!v);return T},kill(){el.remove();tags.splice(tags.indexOf(T),1)}};tags.push(T);return T}
+const where={LINE:()=>new V3(-.9,.9,BELT.z),LD:()=>new V3(LD.base.x,.9,LD.base.z),PK:()=>new V3(PK.base.x,.9,PK.base.z),AMR:()=>new V3(AMR.x,.5,AMR.z)};
+const tName={LD:tag('Loader arm','',()=>new V3(LD.base.x,1.2,LD.base.z)),PK:tag('Picker arm','',()=>new V3(PK.base.x,1.2,PK.base.z)),AMR:tag('Mobile carrier','',()=>new V3(AMR.x,.65,AMR.z)),LINE:tag('Conveyor','',()=>new V3(-.9,.62,BELT.z))};
+const tDB=tag('SpacetimeDB','',()=>DBP.clone().add(new V3(0,.45,0))),tRel=tag('LLM relay','',()=>RELP.clone().add(new V3(0,.42,0)));
+const tSay={},tStat={},tBel={},tSub={};
+['LINE','LD','PK','AMR'].forEach(k=>{tSay[k]=tag('','say',()=>where[k]().add(new V3(0,.55,0)));tStat[k]=tag('','status',()=>where[k]().add(new V3(0,.4,0)));
+  tBel[k]=tag('','belief',()=>where[k]().add(new V3(0,.45,0)));tSub[k]=tag('','code',()=>where[k]().add(new V3(0,.5,0)))});
+const flashes=[];let showFlashes=true;function flashTag(text,cls,p,ms=1600){if(!showFlashes)return;const T=tag(text,cls,()=>p);T.show();T.until=performance.now()+ms;flashes.push(T)}
+const proj=new V3();
+function placeTags(){const w=innerWidth,h=innerHeight,now=performance.now();for(let i=flashes.length-1;i>=0;i--)if(now>flashes[i].until){flashes[i].kill();flashes.splice(i,1)}
+  for(const T of tags){if(!T.on)continue;proj.copy(T.pos()).project(camera);T.el.style.left=((proj.x+1)/2*w)+'px';T.el.style.top=((1-proj.y)/2*h)+'px'}}
+
+// ---------- line simulation (belt speed ramps smoothly) ----------
+const VNOM=.32,VSLOW=.11,ACC=.32,SPACING=.62,TREACH=.7,TOL=.065,TCARRY=.55,TRET=.4,VAL_GLASS=85,VAL_BOX=14,DOWN_PER_S=10;
+const LAT={script:null,language:()=>1.4+rand()*.45,relay:()=>.02};
+const MODE_NAME={script:'Script',language:'Language',relay:'Relay'};
+let sim=null,paused=false,speed=2,results={};
+const boxGeo=new THREE.BoxGeometry(.16,.15,.16);
+function newBox(){const fr=rand()<.36;const o=mesh(boxGeo,fr?mat(C.glass,.1,0,{transparent:true,opacity:.8}):mat(C.card,.85));if(fr)o.add(mesh(new THREE.BoxGeometry(.165,.03,.165),new THREE.MeshBasicMaterial({color:C.bad}),false,false));
+  scene.add(o);return{o,x:BELT.x0+.12,y:BELT.y+.075,z:BELT.z,fr,st:'belt',vy:0}}
+function startSim(mode,opts={}){stopSim();rand=rng(5);
+  sim={mode,t:0,v:VNOM,vt:VNOM,dur:opts.dur||38,loop:!!opts.loop,schedule:opts.schedule||[[7,VSLOW],[19,VNOM],[27,VSLOW],[33,VNOM]],sched:0,stopUntil:0,boxes:[],shards:[],
+    ld:{timer:1.2,anim:0},pk:{st:'idle',t:0,box:null,from:null},amr:{st:'docked',t:0,tote:0,items:[],dead:false},bel:{ldV:VNOM,pkV:VNOM,dock:true,ldHold:false},linePause:false,q:[],
+    m:{del:0,br:0,drop:0,miss:0,jam:0,down:0,lat:[]},feed:[],done:false,quiet:!!opts.quiet,lastBeat:0};
+  AMR.x=DOCK.x;AMR.z=DOCK.z;LD.t.copy(LD.rest);PK.t.copy(PK.rest);return sim}
+function stopSim(){if(!sim)return;for(const b of sim.boxes)scene.remove(b.o);for(const s of sim.shards)scene.remove(s.o);clearPackets();sim=null;Object.values(tSay).forEach(T=>T.show(false))}
+function say(who,text){const T=tSay[who];if(!T||(sim&&sim.quiet))return;T.set(text).show();clearTimeout(T._t);T._t=setTimeout(()=>T.show(false),2300)}
+function feed(t){if(!sim)return;sim.feed.unshift({t:sim.t,txt:t});if(sim.feed.length>8)sim.feed.length=8}
+function publish(from,text,apply,to){const s=sim;if(!s)return;const f=LAT[s.mode];if(!f)return;const lat=f();s.m.lat.push(lat*1000);s.q.push({at:s.t+lat,apply});
+  const a=where[from](),others=(to||Object.keys(where)).filter(k=>k!==from);
+  if(s.mode==='language'){say(from,text);if(!s.quiet)others.forEach(k=>sendCard(a,where[k](),lat*1000/speed))}else if(!s.quiet)others.forEach(k=>sendPackets(a,DBP,where[k](),C.relay,4,650))}
+function setV(v){const s=sim;if(Math.abs(s.vt-v)<1e-6)return;s.vt=v;feed(v<VNOM-.01?'the line is slowing down':'the line is speeding back up');
+  publish('LINE',v<VNOM-.01?`Line slowing to about ${Math.round(v*100/5)*5} cm per second.`:'Line back to normal speed.',()=>{if(s.mode==='language'){s.bel.ldV=v;s.bel.pkV=v}},['LD','PK','AMR'])}
+function slowNow(){if(!sim)return;sim.manualUntil=sim.t+9;setV(VSLOW)}
+function breakBox(b,why){const s=sim;b.st='broken';scene.remove(b.o);if(b.fr){s.m.br++;flashTag('Glass broken · '+fmt$(VAL_GLASS),'bad',new V3(b.x,.45,b.z));feed('broke a glass item, '+why);
+    for(let k=0;k<7;k++){const sh=mesh(new THREE.TetrahedronGeometry(.035),mat(C.glass,.2,0,{transparent:true,opacity:.85}));sh.position.set(b.x,Math.max(.03,b.y),b.z);scene.add(sh);s.shards.push({o:sh,v:new V3((rand()-.5)*1.2,1+rand(),(rand()-.5)*1.2)})}}
+  else{s.m.drop++;flashTag('Dropped','bad',new V3(b.x,.45,b.z));const o=b.o;scene.add(o);o.position.set(b.x,.075,b.z+(rand()-.5)*.2);o.rotation.y=rand();s.shards.push({o,v:new V3(),still:true});feed('dropped an item, '+why)}}
+function step(dt){const s=sim;if(!s||s.done)return;s.t+=dt;
+  if(s.sched<s.schedule.length&&s.t>=s.schedule[s.sched][0]){if(!(s.manualUntil&&s.t<s.manualUntil))setV(s.schedule[s.sched][1]);s.sched++}
+  if(s.manualUntil&&s.t>=s.manualUntil){s.manualUntil=0;setV(VNOM)}
+  if(s.loop&&s.t>s.dur){s.t=0;s.sched=0}
+  for(let i=s.q.length-1;i>=0;i--)if(s.t>=s.q[i].at){const e=s.q.splice(i,1)[0];e.apply()}
+  // the belt eases toward its target speed instead of jumping
+  const want=(s.t<s.stopUntil)?0:(s.linePause?0:s.vt),jam=s.t<s.stopUntil;
+  if(jam)s.v=0;else{const d=want-s.v,stepV=ACC*dt;s.v=Math.abs(d)<=stepV?want:s.v+Math.sign(d)*stepV}
+  // Relay: robots subscribe to line_state, so their picture follows the belt continuously
+  if(s.mode==='relay'){s.bel.ldV=s.vt>s.v?s.v:s.vt;s.bel.pkV=s.v}
+  const vNow=s.v;s.vNow=vNow;beltTex.offset.x-=vNow*dt*6.6;
+  for(const b of s.boxes){if(b.st==='belt'){b.x+=vNow*dt;if(b.x>=BELT.x1-.02){b.st='falling';b.vx=Math.max(vNow,.15)}}
+    else if(b.st==='falling'){b.x+=b.vx*dt;b.vy-=9.8*dt;b.y+=b.vy*dt;if(b.y<=.075)breakBox(b,'it fell off the end of the line')}
+    else if(b.st==='drop'){b.vy-=9.8*dt;b.y+=b.vy*dt;if(b.y<=.075)breakBox(b,'no carrier underneath')}}
+  const ld=s.ld,running=s.loop||s.t<s.dur-6;
+  if(running&&!s.bel.ldHold&&s.t>=s.stopUntil){ld.timer+=dt;if(ld.timer>=SPACING/Math.max(s.bel.ldV,.05)){ld.timer=0;ld.anim=1;const b=newBox();const clash=s.boxes.find(o=>o.st==='belt'&&o.x<BELT.x0+.36);s.boxes.push(b);
+      if(clash){s.m.jam++;s.stopUntil=s.t+2.6;s.m.down+=2.6;flashTag('Jam · line stopped','bad',new V3(BELT.x0+.2,.85,BELT.z),2000);feed('items stacked up and jammed the line');if(clash.fr)breakBox(clash,'crushed in a jam');if(b.fr)breakBox(b,'crushed in a jam')}}}
+  ld.anim=Math.max(0,ld.anim-dt*1.6);const ph=ld.anim;LD.t.set(-2.35+(ph>.5?(-.4+(1-ph)*.8):(-.2*ph)),.75-.15*Math.sin(ph*Math.PI),-.7-.2*Math.sin(ph*Math.PI));
+  LD.status=s.bel.ldHold?'paused for the carrier':'loading every '+(SPACING/Math.max(s.bel.ldV,.05)).toFixed(1)+' s';
+  const pk=s.pk;pk.t+=dt;
+  if(pk.st==='idle'){const c=s.boxes.filter(b=>b.st==='belt'&&b.x<P.x+.01).sort((a,b)=>b.x-a.x)[0];if(c&&(P.x-c.x)/Math.max(s.bel.pkV,.02)<=TREACH){pk.st='reach';pk.t=0;pk.box=c;pk.from=PK.t.clone()}PK.status='watching the belt'}
+  else if(pk.st==='reach'){const e=Math.min(1,pk.t/TREACH);PK.t.lerpVectors(pk.from,new V3(P.x,BELT.y+.12,BELT.z),e);PK.open=.9;PK.status='reaching for an item';
+    if(e>=1){const b=pk.box;if(b&&b.st==='belt'&&Math.abs(b.x-P.x)<=TOL){b.st='held';PK.open=.1;pk.st='carry';pk.t=0;pk.from=PK.t.clone()}
+      else if(s.mode==='relay'&&b&&b.st==='belt'&&b.x<P.x&&P.x-b.x<.3){PK.status='waiting for the item it knows is coming'}
+      else{s.m.miss++;flashTag('Missed','bad',new V3(P.x,.9,BELT.z),900);feed('the picker missed');pk.st='ret';pk.t=0;pk.from=PK.t.clone();PK.open=.6}}}
+  else if(pk.st==='carry'){const e=Math.min(1,pk.t/TCARRY);PK.t.lerpVectors(pk.from,new V3(DOCK.x,.62,DOCK.z),e);PK.status='carrying to the carrier';
+    if(e>=1){if(s.bel.dock||s.mode==='script')release();else{pk.st='hold';publish('PK','Holding an item. Pause the line and the loader.',()=>{s.bel.ldHold=true;s.linePause=true})}}}
+  else if(pk.st==='hold'){PK.status='holding, waiting for the carrier';if(s.bel.dock){release();publish('PK','Item placed. Resume.',()=>{s.bel.ldHold=false;s.linePause=false})}}
+  else if(pk.st==='ret'){const e=Math.min(1,pk.t/TRET);PK.t.lerpVectors(pk.from,PK.rest,e);PK.status='returning';if(e>=1){pk.st='idle';pk.t=0}}
+  function release(){const b=pk.box;pk.box=null;PK.open=.6;pk.st='ret';pk.t=0;pk.from=PK.t.clone();if(!b)return;
+    if(s.amr.st==='docked'&&s.amr.tote<3){b.st='tote';s.amr.items.push(b);s.amr.tote++;s.m.del++;feed('an item went into the carrier');
+      if(s.amr.tote>=3){s.amr.st='out';s.amr.t=0;publish('AMR','Tote full. Leaving for the racks.',()=>{s.bel.dock=false;if(s.mode==='relay'){s.linePause=true;s.bel.ldHold=true;flashTag('Relay holds the line until the carrier is back','good',new V3(-.9,1.15,BELT.z),2000);feed('Relay paused the line while the carrier is away')}})}}
+    else{b.st='drop';b.vy=0;b.x=PK.tool.x;b.z=PK.tool.z;b.y=PK.tool.y-.1}}
+  if(pk.box&&pk.box.st==='held'){pk.box.x=PK.tool.x;pk.box.y=PK.tool.y-.1;pk.box.z=PK.tool.z}
+  const am=s.amr;am.t+=dt;
+  if(am.dead){AMR.status='no signal'}
+  else if(am.st==='out'){const e=Math.min(1,am.t/1.6);AMR.x=DOCK.x+(RACKP.x-DOCK.x)*e;AMR.z=DOCK.z+(RACKP.z-DOCK.z)*e;AMR.status='driving to the racks';if(e>=1){am.st='unload';am.t=0}}
+  else if(am.st==='unload'){AMR.status='unloading';if(am.t>=.9){am.items.forEach(b=>{scene.remove(b.o);b.st='done'});am.items=[];am.tote=0;am.st='back';am.t=0}}
+  else if(am.st==='back'){const e=Math.min(1,am.t/1.6);AMR.x=RACKP.x+(DOCK.x-RACKP.x)*e;AMR.z=RACKP.z+(DOCK.z-RACKP.z)*e;AMR.status='coming back';
+    if(e>=1){am.st='docked';am.t=0;publish('AMR','Back at the dock.',()=>{s.bel.dock=true;if(s.mode==='relay'&&s.pk.st!=='hold'){s.linePause=false;s.bel.ldHold=false}})}}
+  else AMR.status=`docked, ${am.tote} of 3 loaded`;
+  am.items.forEach((b,k)=>{b.x=AMR.x-.1+k*.1;b.z=AMR.z;b.y=.33});
+  for(const sh of s.shards){if(sh.still)continue;if(sh.o.position.y>.02){sh.v.y-=9.8*dt;sh.o.position.addScaledVector(sh.v,dt);sh.o.rotation.x+=dt*6}else sh.o.position.y=.02}
+  for(const b of s.boxes)if(['belt','falling','drop','held','tote'].includes(b.st))b.o.position.set(b.x,b.y,b.z);
+  if(s.heartbeat)heartbeatTick();
+  if(!s.loop&&s.t>=s.dur&&pk.st==='idle'&&!s.boxes.some(b=>['belt','falling','drop','held'].includes(b.st)))finish();if(!s.loop&&s.t>=s.dur+12)finish()}
+const cost=m=>m.br*VAL_GLASS+m.drop*VAL_BOX+m.down*DOWN_PER_S;
+function finish(){const s=sim;if(!s||s.done)return;s.done=true;const m=s.m;results[s.mode]={del:m.del,br:m.br,drop:m.drop,miss:m.miss,jam:m.jam,cost:cost(m)};if(slide().onResult)slide().onResult()}
+
+// ---------- SpacetimeDB demos ----------
+// heartbeat: a scheduled reducer checks every 100 ms that each robot is still reporting
+function heartbeatTick(){const s=sim;if(!s.amr.dead){s.lastBeat=s.t;return}
+  if(!s.offlineMarked&&s.t-s.lastBeat>.3){s.offlineMarked=true;s.bel.dock=false;s.linePause=true;s.bel.ldHold=true;AMR.g.userData.body.emissive.setRGB(.6,0,0);
+    flashTag('check_heartbeats: carrier silent 300 ms · marked offline · line held · staff alerted','bad',new V3(AMR.x,1.1,AMR.z),4200);feed('scheduled check marked the carrier offline')}}
+function cutCarrier(){if(!sim)return;sim.amr.dead=true;sim.heartbeat=true;sim.lastBeat=sim.t;flashTag('Carrier loses its connection','bad',new V3(AMR.x,.9,AMR.z),1600)}
+// reducers: two robots try to claim the same handoff zone in the same instant
+let claimRun=0;
+async function claimDemo(){const id=++claimRun,wait=ms=>new Promise(r=>setTimeout(r,ms/Math.max(.5,speed/2)));zoneMat.opacity=.12;zoneEdge.material.opacity=1;zoneMat.color.setHex(0x9AA3A9);zoneEdge.material.color.setHex(0x9AA3A9);
+  const z=zone.position.clone(),ldGoal=new V3(z.x-.08,z.y-.05,z.z),pkGoal=new V3(z.x+.08,z.y-.05,z.z);LD.base.x=-1.2;PK.base.x=0;LD.t.copy(new V3(-1.2,.85,-.7));PK.t.copy(new V3(0,.85,.05));
+  sendPackets(where.LD(),DBP,DBP,C.ld,3,500);sendPackets(where.PK(),DBP,DBP,C.pk,3,500);flashTag('claim_handoff("zone A", "loader")','code',new V3(-1.2,1.25,-.95),1800);flashTag('claim_handoff("zone A", "picker")','code',new V3(0,1.25,.15),1800);
+  await wait(900);if(id!==claimRun)return;
+  zoneMat.color.setHex(C.ld);zoneEdge.material.color.setHex(C.ld);zoneMat.opacity=.22;flashTag('Committed: zone A belongs to the loader','good',z.clone().add(new V3(0,.5,0)),2200);flashTag('Rolled back: zone A is held by the loader','bad',new V3(0,1.2,.15),2200);PK.flash=1;
+  const a0=LD.t.clone();for(let i=0;i<=30;i++){LD.t.lerpVectors(a0,ldGoal,i/30);await wait(25);if(id!==claimRun)return}
+  await wait(900);for(let i=0;i<=30;i++){LD.t.lerpVectors(ldGoal,a0,i/30);await wait(25);if(id!==claimRun)return}
+  sendPackets(where.LD(),DBP,where.PK(),C.relay,4,500);flashTag('release_handoff("zone A") · picker is notified','code',z.clone().add(new V3(0,.55,0)),1800);zoneMat.color.setHex(C.pk);zoneEdge.material.color.setHex(C.pk);
+  const p0=PK.t.clone();for(let i=0;i<=30;i++){PK.t.lerpVectors(p0,pkGoal,i/30);await wait(25);if(id!==claimRun)return}await wait(700);for(let i=0;i<=30;i++){PK.t.lerpVectors(pkGoal,p0,i/30);await wait(25);if(id!==claimRun)return}
+  zoneMat.opacity=.1;zoneMat.color.setHex(0x9AA3A9);zoneEdge.material.color.setHex(0x9AA3A9)}
+function armsHome(){claimRun++;LD.base.x=-2.35;PK.base.x=1.15;LD.parts.forEach(p=>{});LD.t.copy(LD.rest);PK.t.copy(PK.rest);zoneMat.opacity=0;zoneEdge.material.opacity=0;PK.flash=0}
+// subscriptions: an update only travels to robots whose query matches
+function subDemo(kind){const from=kind==='speed'?where.LINE():where.PK();const to=kind==='speed'?['LD','PK']:['AMR'];
+  to.forEach(k=>sendPackets(from,DBP,where[k](),C.relay,5,750));const skip=Object.keys(where).filter(k=>!to.includes(k)&&k!==(kind==='speed'?'LINE':'PK'));
+  skip.forEach(k=>flashTag('not subscribed · nothing sent','',where[k]().add(new V3(0,.2,0)),1500));
+  flashTag(kind==='speed'?'UPDATE line_state SET belt_mps = 0.11':'INSERT INTO handoff (picker, carrier) VALUES (…)','code',DBP.clone().add(new V3(0,.75,0)),1800)}
+
+// ---------- the finale: a mixed fleet ----------
+const FX=new V3(26,0,0),F=new THREE.Group();F.position.copy(FX);scene.add(F);F.visible=false;
+{const g=mesh(new THREE.PlaneGeometry(11,8),new THREE.MeshStandardMaterial({map:floorTex(),roughness:1}),false,true);g.rotation.x=-Math.PI/2;F.add(g);
+ const lane=mat(0xE2BE4E,.8);for(const [w,d,x,z] of [[7.6,.05,0,-2.25],[7.6,.05,0,-1.35],[7.6,.05,0,1.35],[7.6,.05,0,2.25],[.05,4.5,-3.95,0],[.05,2.7,-3.05,0],[.05,4.5,3.95,0],[.05,2.7,3.05,0]])box(w,.004,d,lane,x,.003,z,F);
+ box(.7,.004,6.6,mat(0xB9C9D8,.9),0,.002,0,F);
+ for(let k=0;k<4;k++){const rx=-3+k*2,rz=3.3,pm=mat(C.rack,.55,.35);for(const dx of [-.4,.4])box(.04,1,.04,pm,rx+dx,.5,rz,F);for(let l=0;l<3;l++){box(.84,.03,.4,mat(0xC9973A,.6),rx,.1+l*.38,rz,F);box(.2,.15,.22,mat(C.card,.85),rx-.2+(l%2)*.3,.19+l*.38,rz,F)}}}
+const LOOP=[[-3.5,-1.8],[3.5,-1.8],[3.5,1.8],[-3.5,1.8]],SEG=[7,3.6,7,3.6],LLEN=21.2;
+function loopAt(s){s=((s%LLEN)+LLEN)%LLEN;let acc=0;for(let i=0;i<4;i++){if(s<=acc+SEG[i]){const u=(s-acc)/SEG[i],a=LOOP[i],b=LOOP[(i+1)%4];return{x:a[0]+(b[0]-a[0])*u,z:a[1]+(b[1]-a[1])*u,h:Math.atan2(-(b[1]-a[1]),b[0]-a[0]),i}}acc+=SEG[i]}return{x:LOOP[0][0],z:LOOP[0][1],h:0,i:0}}
+const ST1=2.0,ST2=12.6,X1=3.5,X2=14.1,OBS=8.8;
+const fArms=[{s:ST1,base:new V3(-1.5,0,-2.6)},{s:ST2,base:new V3(1.5,0,2.6)}].map((o,k)=>{const a=new Arm(k?'ARM-2':'ARM-1',k?C.ld:C.pk,o.base,new V3(o.base.x,.85,o.base.z*.75),F);a.station=o.s;a.timer=k?1.2:0;return a});
+const fAMRs=[0,7,14].map(s=>{const g=makeAMR(F);return{g,s,stop:0,load:false,hit:0}});
+const leg=new THREE.Group();F.add(leg);{const m=mat(C.legged,.5),d=mat(C.graph,.7);const b=mesh(new THREE.BoxGeometry(.5,.14,.24),m);b.position.y=.42;leg.add(b);const h=mesh(new THREE.BoxGeometry(.14,.11,.14),m);h.position.set(.31,.5,0);leg.add(h);
+  leg.userData.legs=[];for(const lx of [-.18,.18])for(const lz of [-.1,.1]){const l=mesh(new THREE.BoxGeometry(.04,.36,.04),d);l.position.set(lx,.18,lz);leg.add(l);leg.userData.legs.push(l)}}
+const LEG={z:-3,dir:1,stop:0,ph:0};
+const drone=new THREE.Group();F.add(drone);{const m=mat(C.ld,.5),d=mat(C.graph,.7);drone.add(mesh(new THREE.BoxGeometry(.22,.08,.22),m));drone.userData.rot=[];
+  for(let a=0;a<4;a++){const ang=a*Math.PI/2+Math.PI/4,arm=mesh(new THREE.BoxGeometry(.38,.025,.03),d);arm.rotation.y=ang;arm.position.set(Math.cos(ang)*.16,0,-Math.sin(ang)*.16);drone.add(arm);
+    const r=mesh(new THREE.CylinderGeometry(.1,.1,.01,18),mat(0x9aa3a9,.4,0,{transparent:true,opacity:.7}),false,false);r.position.set(Math.cos(ang)*.32,.03,-Math.sin(ang)*.32);drone.add(r);drone.userData.rot.push(r)}}
+const obstacle=new THREE.Group();F.add(obstacle);{const pal=mesh(new THREE.BoxGeometry(.5,.08,.4),mat(0x9b7b55,.9));pal.position.y=.04;obstacle.add(pal);for(let k=0;k<3;k++){const c=mesh(new THREE.BoxGeometry(.18,.16,.18),mat(C.card,.85));c.position.set(-.12+k*.12,.16+(k%2)*.02,(k-1)*.06);c.rotation.y=k;obstacle.add(c)}}
+const fHub=dbIcon(.32);fHub.position.set(0,2.6,-.6);F.add(fHub);
+let fLinks=new THREE.Group();F.add(fLinks);
+const fItems=[];
+const FS={on:false,mode:'chaos',t:0,m:{del:0,coll:0,drop:0,block:0,idle:0},before:null,obsT:0,obsOn:false,cool:new Map(),linkT:0};
+const tF={hub:tag('SpacetimeDB','',()=>FX.clone().add(new V3(0,3.25,-.6))),leg:tag('Legged inspector','',()=>FX.clone().add(new V3(0,1,LEG.z))),drone:tag('Drone','',()=>FX.clone().add(drone.position).add(new V3(0,.4,0))),
+  a1:tag('Arm 1','',()=>FX.clone().add(new V3(-1.5,1.15,-2.6))),a2:tag('Arm 2','',()=>FX.clone().add(new V3(1.5,1.15,2.6)))};
+function fleetReset(){FS.mode='chaos';FS.t=0;FS.m={del:0,coll:0,drop:0,block:0,idle:0};FS.before=null;FS.obsT=0;FS.obsOn=false;FS.cool.clear();
+  fAMRs.forEach((a,k)=>{a.s=k*7;a.stop=0;a.load=false;a.hit=0;a.wait=null;a.atSt=null;a.blk=false});LEG.z=-3;LEG.dir=1;LEG.stop=0;fArms.forEach((a,k)=>{a.timer=k?1.2:0});fItems.forEach(i=>F.remove(i.o));fItems.length=0;
+  F.remove(fLinks);fLinks=new THREE.Group();F.add(fLinks);obstacle.visible=false}
+function optimize(){if(FS.mode==='opt')return;fAMRs.forEach(a=>{a.stop=0;a.wait=null;a.atSt=null;a.blk=false});LEG.stop=0;FS.before={...FS.m,t:FS.t};FS.mode='opt';FS.t=0;FS.m={del:0,coll:0,drop:0,block:0,idle:0};FS.linkT=0;
+  const hub=new V3(0,2.6,-.6),targets=[...fAMRs.map(a=>({p:()=>new V3(a.g.position.x,.35,a.g.position.z),c:C.relay})),...fArms.map(a=>({p:()=>new V3(a.base.x,.6,a.base.z),c:C.relay})),
+    {p:()=>new V3(0,.5,LEG.z),c:C.embed},{p:()=>drone.position.clone(),c:C.embed}];
+  targets.forEach((t,k)=>{const l=mesh(new THREE.CylinderGeometry(.015,.015,1,6),new THREE.MeshBasicMaterial({color:t.c}),false,false);l.userData={get:t.p,hub,k};fLinks.add(l)});
+  flashTag('Relay links 7 robots: arms and carriers share latents, the drone and the legged robot share embeddings','good',FX.clone().add(new V3(0,3.7,-.6)),3400)}
+function fleetStep(dt){if(!FS.on)return;FS.t+=dt;const opt=FS.mode==='opt',m=FS.m;
+  FS.obsT+=dt;if(!FS.obsOn&&FS.obsT>6){FS.obsOn=true;FS.obsT=0;obstacle.visible=true;const p=loopAt(OBS);obstacle.position.set(p.x,0,p.z);if(opt)flashTag('The drone sees a fallen pallet and every carrier reroutes','good',FX.clone().add(new V3(p.x,1.2,p.z)),2200)}
+  if(FS.obsOn&&FS.obsT>7){FS.obsOn=false;FS.obsT=0;obstacle.visible=false}
+  const lp=leg.position;let legYield=false;if(opt){for(const lz of [-1.8,1.8]){const ahead=(lz-LEG.z)*LEG.dir;if(ahead>-.3&&ahead<1.0&&fAMRs.some(a=>Math.hypot(a.g.position.x,a.g.position.z-lz)<.5))legYield=true}}
+  if(LEG.stop>0)LEG.stop-=dt;else if(!legYield){LEG.z+=LEG.dir*.55*dt;LEG.ph+=dt*9;if(LEG.z>3){LEG.z=3;LEG.dir=-1}if(LEG.z<-3){LEG.z=-3;LEG.dir=1}}
+  lp.set(0,0,LEG.z);leg.rotation.y=LEG.dir>0?-Math.PI/2:Math.PI/2;leg.userData.legs.forEach((l,k)=>{l.rotation.z=Math.sin(LEG.ph+(k%2?Math.PI:0))*.35});
+  const da=FS.t*.5;drone.position.set(Math.cos(da)*2.6,2.1,Math.sin(da)*1.6);drone.userData.rot.forEach(r=>r.rotation.y+=dt*40);
+  fAMRs.forEach(a=>{let v=1.05;
+    if(a.stop>0){a.stop-=dt;v=0;m.idle+=dt}
+    else{const next=fAMRs.filter(o=>o!==a).map(o=>((o.s-a.s)%LLEN+LLEN)%LLEN).sort((x,y)=>x-y)[0];
+      const onX=[X1,X2].some(X=>{const d=((X-a.s)%LLEN+LLEN)%LLEN;return d<.6||d>LLEN-.6});if(opt&&next<.85&&!onX){v=0;m.idle+=dt}
+      for(const X of [X1,X2]){const d=((X-a.s)%LLEN+LLEN)%LLEN,lz=X===X1?-1.8:1.8;if(opt&&d<1.05&&d>.6&&Math.abs(LEG.z-lz)<1.1){v=0;m.idle+=dt}}
+      const dObs=((OBS-a.s)%LLEN+LLEN)%LLEN;if(!FS.obsOn)a.blk=false;if(FS.obsOn&&!opt&&dObs<.4){v=0;m.idle+=dt;if(!a.blk){a.blk=true;FS.m.block++;a.hit=1;flashTag('Blocked aisle','bad',FX.clone().add(new V3(obstacle.position.x,1,obstacle.position.z)),1200)}}
+      for(const arm of fArms){const d=((arm.station-a.s)%LLEN+LLEN)%LLEN;if(d<v*dt+.001&&d>=0&&!a.atSt){a.atSt=arm;a.stop=opt?.01:1.2;if(opt)a.wait=arm}}
+      if(a.wait){const arm=a.wait;v=0;a.stop=0;m.idle+=dt*.2;if((arm===fArms[0]&&a.load)||(arm===fArms[1]&&!a.load))a.wait=null}}
+    a.s+=v*dt;if(a.atSt){const d=((a.atSt.station-a.s)%LLEN+LLEN)%LLEN;if(d<LLEN-.3&&d>.3)a.atSt=null}
+    const p=loopAt(a.s),near=((a.s-OBS)%LLEN+LLEN)%LLEN<1.1||((OBS-a.s)%LLEN+LLEN)%LLEN<1.1,off=(opt&&FS.obsOn&&near)?.55*Math.cos(Math.min(1,Math.abs((((a.s%LLEN)+LLEN)%LLEN)-OBS)/1.1)*Math.PI/2):0;
+    a.g.position.set(p.x+(p.i===1?off:0),0,p.z);a.g.rotation.y=p.h;a.g.userData.body.emissive.setRGB(a.hit>0?.7:0,0,0);a.hit=Math.max(0,a.hit-dt)});
+  const hit=(key,p,cb)=>{const last=FS.cool.get(key)||-9;if(FS.t-last<2.2)return;FS.cool.set(key,FS.t);cb();FS.m.coll++;flashTag('Collision','bad',FX.clone().add(p).add(new V3(0,.8,0)),1100)};
+  fAMRs.forEach((a,i)=>{if(Math.hypot(a.g.position.x-lp.x,a.g.position.z-lp.z)<.5)hit('L'+i,a.g.position.clone(),()=>{a.stop=1.5;a.hit=1;LEG.stop=1.5});
+    fAMRs.forEach((b,j)=>{if(j<=i)return;if(Math.hypot(a.g.position.x-b.g.position.x,a.g.position.z-b.g.position.z)<.48)hit('A'+i+j,a.g.position.clone(),()=>{a.stop=b.stop=1.2;a.hit=b.hit=1})})});
+  fArms.forEach((arm,k)=>{arm.timer+=dt;const atDock=fAMRs.find(a=>{const d=((arm.station-a.s)%LLEN+LLEN)%LLEN;return d<.2||d>LLEN-.2});
+    const sp=loopAt(arm.station),dockP=new V3(sp.x,.62,sp.z),restP=new V3(arm.base.x,.8,arm.base.z*.78);
+    if(k===0){const ready=arm.timer>3.2,go=opt?(ready&&atDock&&!atDock.load):ready,ph=Math.min(1,Math.max(0,(arm.timer-2.4)/.8));arm.t.lerpVectors(restP,dockP,opt&&!atDock?0:ph);
+      if(go){arm.timer=0;if(atDock&&!atDock.load)atDock.load=true;else{FS.m.drop++;const o=box(.14,.13,.14,mat(C.glass,.15,0,{transparent:true,opacity:.8}),sp.x,.05,sp.z+.1,F);fItems.push({o});flashTag('Dropped · no carrier','bad',FX.clone().add(new V3(sp.x,1,sp.z)),1200)}}}
+    else{const ph=atDock&&atDock.load?Math.min(1,arm.timer/.6):0;arm.t.lerpVectors(restP,dockP,Math.sin(ph*Math.PI));if(atDock&&atDock.load&&arm.timer>.6){atDock.load=false;arm.timer=0;FS.m.del++}else if(!(atDock&&atDock.load))arm.timer=0}
+    arm.update()});
+  fAMRs.forEach(a=>a.g.userData.inner.material.color.setHex(a.load?0x7FB0D8:0x274b6b));if(fItems.length>14){F.remove(fItems[0].o);fItems.shift()}
+  if(opt){FS.linkT+=dt;fLinks.children.forEach(l=>{const {get,hub,k}=l.userData,e=clamp((FS.linkT-k*.12)/.6,0,1);link(l,hub,hub.clone().lerp(get(),e))})}
+  fHub.rotation.y+=dt*.4}
+function fleetScore(){const per=(v,t)=>t>1?(v/t*60):0,m=FS.m,b=FS.before,row=(k,label,good)=>{const now=per(m[k],FS.t),before=b?per(b[k],b.t):null;
+    const cls=FS.mode==='opt'?(good?'ok':(now<.5?'ok':'bad')):(good?'':(now>.5?'bad':''));
+    return`<div class="m"><span class="v ${cls}">${now.toFixed(1)}</span><span class="k">${label} per minute</span>${b?`<span class="p">before Relay: ${before.toFixed(1)}</span>`:''}</div>`};
+  $('score').innerHTML=row('del','Deliveries',true)+row('coll','Collisions')+row('drop','Dropped items')+row('block','Blocked aisles')}
+
+// ---------- ring (platform + crews) ----------
+const RG=new V3(13,0,0),ring=new THREE.Group();ring.position.copy(RG);scene.add(ring);ring.visible=false;
+{const pad=mesh(new THREE.CylinderGeometry(3.3,3.3,.04,64),mat(0xD7DCDF,1),false,true);pad.position.y=-.02;ring.add(pad)}
+const ringHub=dbIcon(.3);ringHub.position.y=.35;ring.add(ringHub);
+let ringNodes=[],ringLinks=new THREE.Group();ring.add(ringLinks);
+const TNAME={arm:'Arm',mobile:'Carrier',legged:'Legged',drone:'Drone'};
+function robotIcon(type){const g=new THREE.Group(),d=mat(C.graph,.7);
+  if(type==='arm'){const m=mat(C.pk,.45);const b=mesh(new THREE.CylinderGeometry(.14,.17,.12,18),d);b.position.y=.06;g.add(b);const s=mesh(new THREE.BoxGeometry(.07,.42,.07),m);s.position.y=.32;s.rotation.z=.35;g.add(s);const s2=mesh(new THREE.BoxGeometry(.06,.3,.06),m);s2.position.set(.18,.55,0);s2.rotation.z=-.9;g.add(s2)}
+  else if(type==='mobile'){const x=makeAMR(g);x.scale.setScalar(.8)}
+  else if(type==='legged'){const m=mat(C.legged,.5);const b=mesh(new THREE.BoxGeometry(.38,.12,.18),m);b.position.y=.34;g.add(b);for(const lx of [-.14,.14])for(const lz of [-.08,.08]){const l=mesh(new THREE.BoxGeometry(.035,.3,.035),d);l.position.set(lx,.15,lz);g.add(l)}}
+  else{const m=mat(C.ld,.5);const b=mesh(new THREE.BoxGeometry(.14,.06,.14),m);b.position.y=.6;g.add(b);for(let a=0;a<4;a++){const ang=a*Math.PI/2+Math.PI/4,arm=mesh(new THREE.BoxGeometry(.3,.02,.025),d);arm.rotation.y=ang;arm.position.set(Math.cos(ang)*.13,.6,-Math.sin(ang)*.13);g.add(arm)}}
+  const ringMark=new THREE.Mesh(new THREE.RingGeometry(.34,.4,40),new THREE.MeshBasicMaterial({color:0x9AA3A9,transparent:true,opacity:0}));ringMark.rotation.x=-Math.PI/2;ringMark.position.y=.01;g.add(ringMark);g.userData.mark=ringMark;
+  return g}
+const MCOL={relay:C.relay,embed:C.embed};
+let ringTags=[];
+function buildRing(spec){ringNodes.forEach(n=>ring.remove(n.g));ringNodes=[];ring.remove(ringLinks);ringLinks=new THREE.Group();ring.add(ringLinks);ringTags.forEach(T=>T.kill());ringTags=[];
+  const list=[];['arm','mobile','legged','drone'].forEach(t=>{for(let i=0;i<spec[t];i++)list.push(t)});const n=Math.max(1,list.length),cnt={};
+  list.forEach((t,i)=>{cnt[t]=(cnt[t]||0)+1;const a=i/n*Math.PI*2-Math.PI/2,g=robotIcon(t);g.position.set(Math.cos(a)*2.3,0,Math.sin(a)*2.3);g.rotation.y=-a+Math.PI/2;ring.add(g);
+    const node={g,type:t,i,name:`${TNAME[t]} ${cnt[t]}`,crew:null,paused:false,pos:g.position.clone()};ringNodes.push(node);ringTags.push(tag(node.name,'',()=>RG.clone().add(node.pos).add(new V3(0,.95,0))))});
+  ringTags.forEach(T=>T.show());ringLinks.userData.plan=planLinks(spec);ringLinks.userData.t=0;ringLinks.userData.n=0}
+function planLinks(spec){const L=[],idx=t=>ringNodes.filter(n=>n.type===t).map(n=>n.i);const arms=idx('arm'),mob=idx('mobile'),leg=idx('legged'),drn=idx('drone');
+  for(let i=0;i<arms.length-1;i++)L.push([arms[i],arms[i+1],'relay']);arms.forEach((a,k)=>{if(mob.length)L.push([a,mob[k%mob.length],'relay'])});
+  for(let i=0;i<mob.length-1;i++)L.push([mob[i],mob[i+1],spec.fragile?'relay':'embed']);leg.forEach(l=>[...mob,...arms].slice(0,2).forEach(o=>L.push([l,o,'embed'])));drn.forEach(d=>[...mob,...arms].slice(0,3).forEach(o=>L.push([d,o,'embed'])));return L}
+function curveLink(a,b,color,par,dashed){const mid=a.clone().lerp(b,.5).setY(1.1);const c=new THREE.QuadraticBezierCurve3(a.clone().setY(.35),mid,b.clone().setY(.35));const t=mesh(new THREE.TubeGeometry(c,24,dashed?.012:.02,6,false),new THREE.MeshBasicMaterial({color,transparent:!!dashed,opacity:dashed?.55:1}),false,false);par.add(t);return t}
+function animateRing(dt){if(!ring.visible)return;ringHub.rotation.y+=dt*.4;const lk=ringLinks,plan=lk.userData.plan;if(!plan)return;lk.userData.t+=dt;
+  const done=lk.userData.n||0;if(done<plan.length){const want=Math.min(plan.length,Math.floor(lk.userData.t/.12));for(let k=done;k<want;k++){const [x,y,m]=plan[k],A=ringNodes[x],B=ringNodes[y];if(A&&B)curveLink(A.pos,B.pos,MCOL[m],lk)}lk.userData.n=Math.max(done,want)}}
+const CREWS=[{name:'Glass line',color:0x12805C,css:'#12805C'},{name:'Restock',color:0x2C6FB7,css:'#2C6FB7'},{name:'Returns',color:0xD99A2B,css:'#D99A2B'}];let activeCrew=0;
+function relation(a,b){const ts=[a.type,b.type].sort().join('+');return{'arm+mobile':'hand off items · latent','arm+arm':'pass items between arms · latent','mobile+mobile':'share the aisle · latent','legged+mobile':'cross paths safely · embedding','arm+legged':'share the work zone · embedding','drone+mobile':'overhead view · embedding','arm+drone':'overhead view · embedding','drone+legged':'overhead view · embedding','drone+drone':'share airspace · embedding','legged+legged':'share the walkway · embedding'}[ts]||'share position · embedding'}
+function paintCrews(){ring.remove(ringLinks);ringLinks=new THREE.Group();ring.add(ringLinks);const lines=[];
+  CREWS.forEach((c,g)=>{const mem=ringNodes.filter(n=>n.crew===g&&!n.paused);for(let i=0;i<mem.length;i++)for(let j=i+1;j<mem.length;j++){curveLink(mem[i].pos,mem[j].pos,c.color,ringLinks);lines.push(`<span><b>${mem[i].name} ↔ ${mem[j].name}</b> ${relation(mem[i],mem[j])}</span>`)}});
+  const loose=ringNodes.filter(n=>n.crew===null&&!n.paused);if(ringNodes.some(n=>n.crew!==null))for(let i=0;i<loose.length;i++)for(const o of ringNodes)if(o!==loose[i]&&o.crew!==null&&o.type==='mobile'&&loose[i].type==='mobile')curveLink(loose[i].pos,o.pos,0x9AA3A9,ringLinks,true);
+  ringNodes.forEach(n=>{const mk=n.g.userData.mark;mk.material.opacity=n.crew===null&&!n.paused?0:1;mk.material.color.setHex(n.paused?C.bad:n.crew===null?0x9AA3A9:CREWS[n.crew].color)});
+  const r=$('roster');if(r)r.innerHTML=ringNodes.map((n,i)=>`<button data-i="${i}" style="border-left-color:${n.paused?'#C8392B':n.crew===null?'#C3C9CD':CREWS[n.crew].css}">${n.name}${n.paused?' · paused':''}</button>`).join('');
+  if(r)r.querySelectorAll('button').forEach(b=>b.onclick=e=>toggleNode(ringNodes[+b.dataset.i],e.shiftKey));
+  const l=$('links');if(l)l.innerHTML=lines.length?lines.slice(0,6).join('')+(lines.length>6?`<span>and ${lines.length-6} more</span>`:''):'<span>Tap robots to build a crew. Connections appear here.</span>'}
+function toggleNode(n,pause){if(!n)return;if(pause)n.paused=!n.paused;else n.crew=n.crew===activeCrew?null:activeCrew;paintCrews()}
+
+// ---------- inspector ----------
+let insp=null;
+function openRobot(who){insp={who};$('inT').textContent={LD:'Loader arm',PK:'Picker arm',AMR:'Mobile carrier'}[who];
+  $('inBody').innerHTML=`<div><h4>What it believes, and what is true</h4><table id="iBel"></table></div><div><h4>How it hears about changes</h4><div id="iHow"></div></div><div><h4>Recent events</h4><div class="log" id="iLog"></div></div>`;$('insp').classList.add('on');inspTick(true)}
+function closeInsp(){insp=null;$('insp').classList.remove('on')}
+$('inClose').onclick=closeInsp;let inspLast=0;
+function inspTick(force){const now=performance.now();if(!insp||(!force&&now-inspLast<300))return;inspLast=now;const s=sim,w=insp.who,real=s?s.v:VNOM;
+  const bv=s?(w==='LD'?s.bel.ldV:s.bel.pkV):VNOM,bd=s?s.bel.dock:true,dock=s?s.amr.st==='docked':true,row=(k,b,r,ok)=>`<tr><td>${k}</td><td>${b}</td><td>${r}</td><td class="${ok?'ok':'bad'}">${ok?'match':'wrong'}</td></tr>`;
+  let h='<tr><th>fact</th><th>believes</th><th>true</th><th></th></tr>'+row('Belt speed',bv.toFixed(2)+' m/s',real.toFixed(2)+' m/s',Math.abs(bv-real)<.03||real===0);if(w==='PK')h+=row('Carrier at dock',bd?'yes':'no',dock?'yes':'no',bd===dock);
+  $('iBel').innerHTML=h;$('iHow').textContent=!s?'Run the line to see this live.':s.mode==='script'?'It never does. Its script assumes full speed and a carrier that is always there.':s.mode==='language'?'A sentence relayed by an LLM, about 1.5 seconds after the change.':'Its SpacetimeDB subscription pushes the new row about 20 ms after the change.';
+  $('iLog').innerHTML=s&&s.feed.length?s.feed.map(x=>`<div>${x.t.toFixed(0)}s · ${x.txt}</div>`).join(''):'<div>nothing yet</div>'}
+
+// ---------- camera ----------
+let cam=null;const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+function shotFor(k){const S={
+  wide:{t:[.3,.4,.3],dir:[1,.85,1.45],zoom:.92},end:{t:[1.2,.45,.2],dir:[.75,.7,1.5],zoom:1.55},talk:{t:[-.3,.95,-.2],dir:[.8,.6,1.5],zoom:1.05},
+  calm:{t:[.3,.5,.4],dir:[1.2,.75,1.1],zoom:1.0},hive:{t:[-.2,1.1,-.5],dir:[.7,.55,1.5],zoom:1.2},picker:{t:[1.1,.6,.1],dir:[.9,.55,1.4],zoom:2.0},
+  claim:{t:[-.6,.6,-.4],dir:[.55,.6,1.5],zoom:1.9},subs:{t:[-.3,1.0,-.3],dir:[.85,.65,1.45],zoom:1.12},beat:{t:[1.4,.5,.5],dir:[.8,.75,1.4],zoom:1.5},
+  ring:{t:[RG.x,.3,0],dir:[.35,1,1.25],zoom:.9},finale:{t:[FX.x,.4,0],dir:[.75,.95,1.25],zoom:.62},close:{t:[FX.x,.6,0],dir:[1.2,.7,.9],zoom:.7}};return S[k]||S.wide}
+function camTo(k,instant){const p=shotFor(k),tgt=new V3(...p.t),pos=tgt.clone().add(new V3(...p.dir).normalize().multiplyScalar(18));
+  if(instant||!controls){cam=null;camera.position.copy(pos);camera.zoom=p.zoom;camera.updateProjectionMatrix();if(controls)controls.target.copy(tgt);camera.lookAt(tgt);return}
+  const far=camera.position.distanceTo(pos)>12;cam={t:0,ms:far?1900:1400,p0:camera.position.clone(),p1:pos,t0:controls.target.clone(),t1:tgt,z0:camera.zoom,z1:p.zoom,dip:far?.25:0}}
+function stepCam(dt){if(!cam)return;cam.t+=dt;const u=Math.min(1,cam.t/cam.ms),e=ease(u);camera.position.lerpVectors(cam.p0,cam.p1,e);controls.target.lerpVectors(cam.t0,cam.t1,e);
+  camera.zoom=(cam.z0+(cam.z1-cam.z0)*e)*(1-cam.dip*Math.sin(u*Math.PI));camera.updateProjectionMatrix();camera.lookAt(controls.target);if(u>=1)cam=null}
+
+// ---------- slides ----------
+const SECTIONS=['Problem','Gap','Relay','SpacetimeDB','Proof','Product','Live'];
+const fig=(n,l)=>`<div class="fig"><span class="n">${n}</span><span class="l">${l}</span></div>`;
+const NO=(i,s)=>`<div class="no"><span>${String(i+1).padStart(2,'0')}</span><span>${s}</span></div>`;
+const SL=[
+{sec:0,cam:'wide',setup(){startSim('script',{loop:true,dur:40,quiet:true,schedule:[[4,VSLOW],[12,VNOM],[19,VSLOW],[27,VNOM]]})},
+ html:()=>`<h1>Robots work well alone. Put several on one job and they break things.</h1>${fig('$1.4T','lost each year to unplanned downtime by the 500 largest companies')}<span class="src">Siemens, The True Cost of Downtime 2024</span>`,
+ notes:'Robots are very good on their own now. The trouble starts when several share one job. Unplanned downtime costs the world’s 500 largest companies about $1.4 trillion a year, roughly 11 percent of revenue. Behind me is a packing line coordinated the way most are today.'},
+{sec:0,cam:'end',setup(){startSim('script',{schedule:[[3,VSLOW],[16,VNOM],[22,VSLOW],[30,VNOM]]});score('line')},
+ html:()=>`<h1>When the belt slows down, the robots find out too late.</h1><p class="sub">The picker reaches for a box that isn’t there yet. The loader keeps loading. When the carrier leaves, glass goes on the floor.</p>${fig('$36K','per hour for a stopped consumer goods line, the low end')}<span class="src">Siemens 2024</span>`,
+ notes:'Here the belt slows down, which happens constantly. The picker still assumes full speed, so it reaches early and misses. The loader keeps loading at full pace, so items jam. When the carrier drives off, the picker drops glass into empty air. A stopped consumer goods line costs about $36,000 an hour, and that is the low end.'},
+{sec:0,cam:'talk',setup(){nodes(false,true);tRel.show();startSim('language',{schedule:[[2,VSLOW],[14,VNOM],[20,VSLOW],[28,VNOM]]});score('line')},
+ html:()=>`<h1>The usual fix is to have robots describe what changed in words.</h1><p class="sub">An LLM relays each sentence. The other robots read it about <b>1.5 seconds</b> later and convert “about 10 cm a second” back into numbers.</p>`,
+ notes:'The newer fix is language. One robot describes the change in a sentence, an LLM relays it, and the others parse it. It is safer, but every message takes about a second and a half, and words round things off. Teams spend a lot of engineering on this wiring: the robot arm is only 40 to 50 percent of what a deployed cell costs.'},
+{sec:1,cam:'calm',setup(){Object.values(tName).forEach(T=>T.show())},
+ html:()=>`<h1>Software agents have shared protocols. Robots on a floor don’t.</h1><div class="cols"><div><h3>AI agents</h3><p>MCP connects models to tools and data. A2A lets agents from different companies hand work to each other.</p></div><div><h3>Physical robots</h3><p>Fleet standards like MassRobotics and VDA 5050 share location, speed, and status. Nothing shares what a robot sees or plans.</p></div></div>`,
+ notes:'Online, agents already have shared protocols: MCP for tools and data, A2A for handing work between agents. Robot fleets have standards too, MassRobotics and VDA 5050, but those carry location, speed and status. Nothing carries what a robot actually sees or intends to do. That is the gap Relay fills.'},
+{sec:2,cam:'hive',setup(){nodes(true,false);tDB.show();Object.values(tName).forEach(T=>T.show());pulseAll()},
+ html:()=>`<h1>Relay lets robots share what their models understand.</h1><p class="sub">Not a sentence about it. The numbers inside the model, written to one live database that every robot reads from.</p><div class="row"><button class="ghost" data-pulse>Send an update</button></div>`,
+ notes:'This is Relay. Every robot that runs a vision language action model already holds its understanding of the scene as numbers. Relay writes those numbers to one live SpacetimeDB database, and every robot that needs them gets them in milliseconds.'},
+{sec:2,cam:'picker',setup(){nodes(true,true);tDB.show();tRel.show();tName.PK.show();showTap('latent')},
+ html:()=>`<h1>A VLA has three places Relay can listen.</h1><div class="vla">
+  <div class="box">Camera image</div><div></div>
+  <div class="arrow"></div><div></div>
+  <div class="box">Vision encoder<small>turns pixels into patch embeddings</small></div><button class="tap" data-tap="embed" aria-pressed="false"><i style="background:var(--embed)"></i>Embedding</button>
+  <div class="arrow"></div><div></div>
+  <div class="box ins">Instruction<small>“Place the glass in the carrier’s tote.”</small></div><div></div>
+  <div class="arrow"></div><div></div>
+  <div class="box">Language model backbone<small>reasons over the image and the instruction</small></div><button class="tap" data-tap="latent" aria-pressed="true"><i style="background:var(--relay)"></i>Latent</button>
+  <div class="arrow"></div><div></div>
+  <div class="box">Action head → joint commands<small>or a text head, if you ask it to explain</small></div><button class="tap" data-tap="lang" aria-pressed="false"><i style="background:var(--lang)"></i>Language</button></div>
+  <div class="detail" id="tapD"></div><span class="src">Example: OpenVLA sees with SigLIP and DINOv2, reasons with Llama 2 7B, and emits actions as tokens.</span>`,
+ notes:'Here is where the language part of a VLA lives. A vision encoder turns the camera image into patch embeddings. A language model, Llama 2 7B in OpenVLA’s case, takes those plus the instruction, like place the glass in the tote, and reasons over both. An action head turns its final state into joint commands. Relay can listen at three points. The embedding, a compact summary of what the robot sees. The latent, the language model’s hidden state, which is the robot’s full understanding plus its plan. Or the text head, which is words. Relay uses latents for tight handoffs, embeddings for traffic and robots from other vendors, and language only for people.'},
+{sec:3,cam:'subs',setup(){nodes(true,true);tDB.show();tRel.show();startSim('language',{schedule:[[1.5,VSLOW],[14,VNOM]],quiet:false});beliefs(true)},
+ html:()=>`<h1>Messages give every robot its own copy of the floor. Copies drift.</h1><p class="sub">With ROS topics, MQTT, or an LLM relay, each robot rebuilds the world from what it was told. SpacetimeDB keeps <b>one copy</b>, and every robot reads that.</p><div class="row"><button class="go" data-onecopy>Switch to one shared copy</button></div>`,
+ notes:'Why a database at all? With messaging, ROS topics, MQTT, or an LLM relay, every robot keeps its own picture of the floor, built from whatever messages reached it. Look at the tags: each robot’s idea of the belt speed is different, and some are wrong. SpacetimeDB is a relational database that is also the server. There is one copy of the state, held in memory with a commit log on disk, and every robot reads it. Click the button and every robot’s picture snaps to the truth.'},
+{sec:3,cam:'claim',setup(){nodes(true,false);tDB.show();armsClaimStage()},
+ html:()=>`<h1>Reducers turn safety rules into transactions.</h1><p class="sub">A reducer is the only way to change a table. It runs inside the database and either commits completely or rolls back.</p>
+ <pre><span class="k">export const</span> claim_handoff = spacetimedb.reducer(
+  { zone: t.string(), robot: t.string() },
+  (ctx, { zone, robot }) =&gt; {
+    const held = ctx.db.handoff.zone.find(zone);
+    <span class="k">if</span> (held &amp;&amp; held.robot !== robot)
+      <span class="k">throw new</span> SenderError(\`\${zone} is held\`);
+    ctx.db.handoff.zone.update({ zone, robot });
+  });</pre><div class="row"><button class="go" data-claim>Both arms claim zone A</button></div>`,
+ notes:'Reducers are where Relay’s safety rules live. A reducer is the only way to change a table, and it runs as a transaction inside the database, so it either fully commits or fully rolls back. Here both arms try to claim the same handoff zone in the same instant. One claim commits, the other rolls back, and the second arm waits until the zone is released. No robot can skip this rule, because there is no other way to write the data.'},
+{sec:3,cam:'subs',setup(){nodes(true,false);tDB.show();subTags(true)},
+ html:()=>`<h1>Subscriptions send each robot only what it asked for.</h1><p class="sub">Each robot registers SQL queries. It gets the matching rows once, then every change to them, pushed into a local cache.</p>
+ <pre>conn.subscriptionBuilder().subscribe([
+  "SELECT * FROM line_state WHERE line = 'L3'",
+  "SELECT * FROM handoff WHERE picker = 'PK-2'",
+]);
+conn.db.line_state.onUpdate((ctx, old, row) =&gt;
+  retime(row.belt_mps));</pre><div class="row"><button class="ghost" data-sub="speed">Slow the belt</button><button class="ghost" data-sub="hand">Request a carrier</button></div>`,
+ notes:'Subscriptions are how each robot stays current without being flooded. Each robot registers SQL queries. The tags show what each one subscribes to. SpacetimeDB sends the matching rows once, then pushes every change into the robot’s local cache and fires a callback. Slow the belt and only the two arms hear it. Request a carrier and only the carrier hears it.'},
+{sec:3,cam:'beat',setup(){nodes(true,false);tDB.show();startSim('relay',{schedule:[],quiet:true});Object.values(tName).forEach(T=>T.show())},
+ html:()=>`<h1>Scheduled reducers notice when a robot goes quiet.</h1><p class="sub">A schedule table runs <b>check_heartbeats</b> every 100 ms. A robot silent for 300 ms is marked offline, and everyone else adapts in the same transaction.</p><div class="row"><button class="go" data-cut>Cut the carrier’s connection</button></div>`,
+ notes:'Robots drop off networks. SpacetimeDB has schedule tables: rows that say run this reducer at this time or on this interval. Relay runs a heartbeat check every 100 milliseconds. Cut the carrier’s connection and within 300 milliseconds it is marked offline, the picker stops releasing, the line holds, and staff are alerted, all as one transaction.'},
+{sec:3,cam:'calm',setup(){nodes(true,false);tDB.show()},
+ html:()=>`<h1>It already runs a whole online world.</h1><p class="sub">The entire backend of BitCraft Online, a multiplayer game with a shared persistent world, runs as a single SpacetimeDB module. A warehouse floor is a smaller world with the same needs: shared state, rules, and instant updates.</p><span class="src">SpacetimeDB project README</span>`,
+ notes:'This is not a toy database. The entire backend of the MMO BitCraft Online runs as one SpacetimeDB module. Thousands of players in one persistent world need the same three things a robot floor needs: one shared state, rules nobody can break, and updates that arrive instantly.'},
+{sec:4,cam:'wide',setup(){nodes(true,false);startSim('relay');score('line')},
+ html:()=>`<h1>The same line on Relay.</h1><p class="sub">The belt eases down and every robot follows it continuously. When the carrier leaves, Relay holds the line until it’s back.</p><div class="row"><button class="ghost" data-slow>Slow the line now</button></div>`,
+ notes:'Same robots, same slowdowns, now on Relay. Because every robot subscribes to the line state, they follow the belt as it eases down, continuously, instead of hearing about it later. When the carrier leaves, Relay holds the line until it is back.'},
+{sec:4,cam:'calm',setup(){ensureResults()},onResult(){drawBars()},
+ html:()=>`<h1>Cost of the same 38 second run</h1><div class="bars" id="bars"></div><span class="src">Simulated line. Glass valued at $85, a stopped line at $10 a second. Breakage comes out of the simulation.</span>`,
+ notes:'Here is the same run three ways. Scripts break glass and jam the line. Language is much better but still drops items while messages are in flight. Relay delivers the most items with nothing broken.'},
+{sec:5,cam:'ring',setup(){ring.visible=true;WH.visible=false;buildRing(readForm())},
+ html:()=>`<h1>Developers tell us their fleet. We design the coordination.</h1><div class="form"><label>Arms<input type="number" id="fArm" min="0" max="10" value="3"></label><label>Carriers<input type="number" id="fMob" min="0" max="10" value="3"></label><label>Legged<input type="number" id="fLeg" min="0" max="6" value="1"></label><label>Drones<input type="number" id="fDrn" min="0" max="6" value="1"></label>
+ <label class="wide">Goal<select id="fGoal"><option>Move fragile goods without breakage</option><option>Keep a line running through slowdowns</option><option>Share aisles safely with people</option></select></label></div>
+ <div class="row"><button class="go" id="fGo">Design my coordination</button></div><div class="legend"><span><i style="background:var(--relay)"></i>latent link</span><span><i style="background:var(--embed)"></i>embedding link</span></div>`,
+ notes:'This is the product. A developer tells us how many robots they have, what kinds, and the goal. We weigh the options and design their coordination: which robots share full latents, which share embeddings, and the SpacetimeDB module that enforces their rules. Then we integrate it.'},
+{sec:5,cam:'ring',setup(){ring.visible=true;WH.visible=false;if(!ringNodes.length)buildRing(readForm());else{ringTags.forEach(T=>T.show())}ringNodes.forEach(n=>{n.crew=null;n.paused=false});paintCrews()},
+ html:()=>`<h1>Managers group robots into crews from a tablet.</h1><p class="sub">A crew is the set of robots doing one job. Inside a crew, robots share full latents and claim handoffs. Between crews they only share traffic. Pick a crew, then tap robots. Shift and tap to pause one.</p>
+ <div class="crews" id="crewSel">${CREWS.map((c,k)=>`<button data-c="${k}" aria-pressed="${k===0}"><i style="background:${c.css}"></i>${c.name}</button>`).join('')}</div><div class="roster" id="roster"></div><div class="links" id="links"></div>`,
+ notes:'Feedback from people who run floors: managers need control. In the Relay manager app, a manager makes crews, like Glass line, Restock and Returns, and taps robots to add them. Robots in the same crew share full latents and can hand items to each other. Robots in different crews only share traffic, so they stay out of each other’s way. Each tap calls a reducer, so the change reaches every robot at once and is logged.'},
+{sec:5,cam:'wide',setup(){startSim('relay',{loop:true,dur:40,quiet:true});Object.values(tStat).forEach(T=>T.show());showFlashes=false},
+ html:()=>`<h1>Everyone on the floor can see what every robot is doing.</h1><p class="sub">On staff phones and wall kiosks. The floor app subscribes to the same tables the robots use, through the SpacetimeDB TypeScript SDK.</p>
+ <div class="phone" id="phone"><div class="top"><span>Relay Floor · Line 3</span><span>live</span></div><div class="alert" id="phAlert" hidden></div><div id="phList"></div></div>`,
+ notes:'Every employee can see what each robot is doing. Relay Floor runs on staff phones and on wall kiosks. It is a web app built on the SpacetimeDB TypeScript SDK, subscribed to the same tables the robots use, so it updates the moment a row changes. No separate dashboard to wire up.'},
+{sec:6,cam:'finale',setup(){F.visible=true;WH.visible=false;fleetReset();FS.on=true;Object.values(tF).forEach(T=>T.show());score('fleet')},
+ html:()=>`<h1>A whole floor, before and after Relay.</h1><p class="sub">Two arms, three carriers, a legged inspector, and a drone, working the way most fleets do today.</p><div class="row"><button class="go" data-opt>Turn on Relay</button><button class="ghost" data-freset>Reset</button></div>`,
+ notes:'Last one. Two arms, three carriers, a legged inspection robot crossing the aisles, and a drone overhead. Right now carriers bump each other and the legged robot, an arm drops items when no carrier is there, and a fallen pallet blocks an aisle. Watch what happens when I turn on Relay. Arms and carriers share latents, the drone and legged robot share embeddings. Collisions and drops go to zero, and the drone’s view reroutes every carrier around the pallet.'},
+{sec:6,cam:'close',setup(){F.visible=true;WH.visible=false;fleetReset();FS.on=true;optimize()},
+ html:()=>`<h1>Relay</h1><p class="sub">Robots don’t need to talk to work together. They need to share what they know. Built on SpacetimeDB.</p><div class="row"><button class="ghost" data-go="0">Back to start</button></div>`,
+ notes:'Robots do not need to talk to work together. They need to share what they know. We are Relay. Thank you.'}
+];
+function pulseAll(){[where.LINE(),where.AMR()].forEach(a=>sendPackets(a,DBP,where.PK(),C.relay,7,850));sendPackets(where.PK(),DBP,where.LD(),C.relay,7,850)}
+const TAPS={latent:{what:'The language model’s hidden state: the robot’s full understanding of the scene plus what it plans to do.',size:'512 to 4,096 numbers per frame',lat:'about 20 ms',use:'Tight handoffs between robots on the same job.'},
+  embed:{what:'Patch embeddings from the vision encoder: a compact summary of what the robot sees.',size:'a few hundred numbers',lat:'about 40 ms',use:'Traffic, and robots from different makers with a shared encoder.'},
+  lang:{what:'Text from the model’s language head.',size:'about 20 tokens',lat:'about 1.5 s, including generation',use:'Explaining decisions to managers and staff, never robot to robot timing.'}};
+function showTap(k){const t=TAPS[k],d=$('tapD');if(d)d.innerHTML=`<span>Shares</span><span>${t.what}</span><span>Size</span><span>${t.size}</span><span>Latency</span><span>${t.lat}</span><span>Relay uses it for</span><span>${t.use}</span>`;
+  clearPackets();const a=where.PK(),c=where.AMR();if(k==='lang'){[0,500].forEach(dl=>setTimeout(()=>sendCard(a,c,1500),dl))}else sendPackets(a,DBP,c,k==='latent'?C.relay:C.embed,k==='latent'?10:5,k==='latent'?650:800)}
+function beliefs(on){['LD','PK','AMR'].forEach(k=>tBel[k].show(on))}
+function updBeliefs(){if(!tBel.PK.on||!sim)return;const s=sim,real=s.v;
+  [['LD',s.bel.ldV],['PK',s.bel.pkV],['AMR',s.mode==='relay'?real:(s.amrV??VNOM)]].forEach(([k,v])=>{const ok=Math.abs(v-real)<.03;tBel[k].set(`belt ${v.toFixed(2)} m/s ${ok?'✓':'✗'}`);tBel[k].el.classList.toggle('wrong',!ok);tBel[k].el.classList.toggle('right',ok)})}
+function oneCopy(){if(!sim)return;sim.mode='relay';flashTag('One shared copy: every robot reads line_state','good',DBP.clone().add(new V3(0,.8,0)),2400);feed('switched to one shared copy')}
+function armsClaimStage(){LD.base.x=-1.2;PK.base.x=0;LD.t.set(-1.2,.85,-.7);PK.t.set(0,.85,.05);zoneMat.opacity=.1;zoneEdge.material.opacity=1;zoneMat.color.setHex(0x9AA3A9);zoneEdge.material.color.setHex(0x9AA3A9);
+  [LD,PK].forEach(a=>{a.parts[0].position.x=a.base.x;a.parts[1].position.x=a.base.x})}
+function subTags(on){const q={LINE:'publishes line_state',LD:'SELECT * FROM line_state',PK:'line_state + handoff WHERE picker = PK-2',AMR:'SELECT * FROM handoff WHERE carrier = AMR-3'};Object.keys(q).forEach(k=>tSub[k].set(q[k]).show(on))}
+function readForm(){const n=(id,d)=>$(id)?clamp(+$(id).value||0,0,10):d;return{arm:n('fArm',3),mobile:n('fMob',3),legged:n('fLeg',1),drone:n('fDrn',1),fragile:$('fGoal')?$('fGoal').selectedIndex===0:true}}
+function ensureResults(){const need=['script','language','relay'].filter(m=>!results[m]);if(need.length){const me=cur;need.forEach(m=>{startSim(m,{quiet:true});showFlashes=false;let g=0;while(sim&&!sim.done&&g<20000){step(1/30);g++}
+    for(const b of sim.boxes)scene.remove(b.o);for(const s of sim.shards)scene.remove(s.o);sim=null});showFlashes=true;clearPackets();Object.values(tSay).forEach(T=>T.show(false));if(cur!==me)return}drawBars()}
+function drawBars(){const el=$('bars');if(!el)return;const ms=[['script','Script',C.bad],['language','Language',0x8A9096],['relay','Relay',C.relay]],mx=Math.max(1,...ms.map(([m])=>results[m]?results[m].cost:0));
+  el.innerHTML=ms.map(([m,l,c])=>{const r=results[m];return`<div class="bar"><span>${l}</span><span class="t"><i style="width:0;background:#${c.toString(16).padStart(6,'0')}" data-w="${r?Math.max(1.2,r.cost/mx*100):0}"></i></span><b>${r?fmt$(r.cost):'—'}</b></div>`}).join('')+
+    (results.relay?`<div class="bar"><span></span><span class="src">Relay delivered ${results.relay.del} items, ${results.relay.br} broken.</span><span></span></div>`:'');
+  requestAnimationFrame(()=>el.querySelectorAll('i[data-w]').forEach(i=>i.style.width=i.dataset.w+'%'))}
+let scoreKind=null;function score(k){scoreKind=k;$('score').hidden=false}
+function lineScore(){const s=sim;if(!s){$('score').innerHTML='';return}const m=s.m;
+  $('score').innerHTML=`<div class="m"><span class="v ${cost(m)>0?'bad':'ok'}">${fmt$(cost(m))}</span><span class="k">${MODE_NAME[s.mode]} · cost of this run</span></div><div class="m"><span class="v ${m.br?'bad':''}">${m.br}</span><span class="k">glass broken</span></div><div class="m"><span class="v">${s.v.toFixed(2)}</span><span class="k">belt, m/s</span></div>`}
+function phone(){const l=$('phList');if(!l||!sim)return;const rows=[['Loader arm',LD.status,C.ld],['Picker arm',PK.status,C.pk],['Mobile carrier',AMR.status,C.amr],['Conveyor',`belt at ${sim.v.toFixed(2)} m/s`,0x8A9096]];
+  l.innerHTML=rows.map(([n,s,c])=>`<div class="r"><i style="background:#${c.toString(16).padStart(6,'0')}"></i><div><b>${n}</b><br><span>${s}</span></div></div>`).join('');
+  const a=$('phAlert');if(a){const hold=sim.bel.ldHold;a.hidden=!hold;a.textContent='Line held while the carrier is at the racks'}}
+
+let cur=-1;const slide=()=>SL[cur]||{};
+const prog=$('prog');SL.forEach((s,i)=>{if(i&&SL[i-1].sec!==s.sec){const g=document.createElement('span');g.className='gap';prog.appendChild(g)}const b=document.createElement('button');b.setAttribute('aria-label',`Slide ${i+1}`);b.onclick=()=>go(i);prog.appendChild(b)});
+function resetAll(){stopSim();nodes(false,false);F.visible=false;FS.on=false;ring.visible=false;WH.visible=true;tags.forEach(t=>{if(!flashes.includes(t))t.show(false)});$('score').hidden=true;scoreKind=null;showFlashes=true;
+  armsHome();[LD,PK].forEach(a=>{a.parts[0].position.x=a.base.x;a.parts[1].position.x=a.base.x});AMR.x=DOCK.x;AMR.z=DOCK.z;AMR.g.userData.body.emissive.setRGB(0,0,0);closeInsp()}
+function go(i){i=clamp(i,0,SL.length-1);if(i===cur)return;cur=i;resetAll();const s=SL[i];$('copy').innerHTML=NO(i,SECTIONS[s.sec])+s.html();$('notes').textContent=s.notes;
+  $('sec').innerHTML=`${SECTIONS[s.sec]}<span>${String(i+1).padStart(2,'0')} / ${SL.length}</span>`;[...prog.querySelectorAll('button')].forEach((b,j)=>b.className=j===i?'cur':j<i?'done':'');
+  if(s.setup)s.setup();camTo(s.cam);wire()}
+function wire(){const c=$('copy');
+  c.querySelectorAll('[data-go]').forEach(x=>x.onclick=()=>go(+x.dataset.go));c.querySelectorAll('[data-pulse]').forEach(x=>x.onclick=pulseAll);
+  c.querySelectorAll('[data-slow]').forEach(x=>x.onclick=()=>{if(!sim||sim.done)startSim('relay',{schedule:[]});slowNow()});
+  c.querySelectorAll('[data-tap]').forEach(x=>x.onclick=()=>{c.querySelectorAll('[data-tap]').forEach(y=>y.setAttribute('aria-pressed',String(y===x)));showTap(x.dataset.tap)});
+  c.querySelectorAll('[data-onecopy]').forEach(x=>x.onclick=()=>{oneCopy();x.disabled=true;x.textContent='One shared copy'});
+  c.querySelectorAll('[data-claim]').forEach(x=>x.onclick=()=>{armsClaimStage();claimDemo()});
+  c.querySelectorAll('[data-sub]').forEach(x=>x.onclick=()=>subDemo(x.dataset.sub));
+  c.querySelectorAll('[data-cut]').forEach(x=>x.onclick=()=>{cutCarrier();x.disabled=true});
+  if($('fGo'))$('fGo').onclick=()=>buildRing(readForm());
+  const cs=$('crewSel');if(cs)cs.querySelectorAll('button').forEach(x=>x.onclick=()=>{activeCrew=+x.dataset.c;cs.querySelectorAll('button').forEach(y=>y.setAttribute('aria-pressed',String(y===x)))});
+  if($('roster'))paintCrews();
+  c.querySelectorAll('[data-opt]').forEach(x=>x.onclick=()=>{optimize();x.textContent='Relay is on';x.disabled=true});
+  c.querySelectorAll('[data-freset]').forEach(x=>x.onclick=()=>{fleetReset();const b=c.querySelector('[data-opt]');if(b){b.textContent='Turn on Relay';b.disabled=false}});
+  if($('bars'))drawBars()}
+$('prev').onclick=()=>go(cur-1);$('next').onclick=()=>go(cur+1);$('spd').onchange=e=>{speed=+e.target.value};$('nBtn').onclick=()=>{$('notes').hidden=!$('notes').hidden};
+addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;
+  if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();go(cur+1)}else if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();go(cur-1)}
+  else if(e.key==='n'||e.key==='N')$('nBtn').click();else if(e.key==='Escape')closeInsp();else if(e.key==='p'||e.key==='P')paused=!paused;
+  else if(e.key==='o'||e.key==='O'){const b=$('copy').querySelector('[data-opt]');if(b)b.click()}else if(e.key==='s'||e.key==='S'){const b=$('copy').querySelector('[data-slow]');if(b)b.click()}});
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();let down=null;
+canvas.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY]});
+canvas.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;ndc.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(ndc,camera);
+  if(ring.visible&&$('roster')){const hits=ray.intersectObjects(ringNodes.map(n=>n.g),true);if(hits&&hits.length){const o=hits[0].object;toggleNode(ringNodes.find(n=>{let p=o;while(p){if(p===n.g)return true;p=p.parent}return false}),e.shiftKey)}return}
+  if(!WH.visible)return;for(const [arm,who] of [[LD,'LD'],[PK,'PK']]){const h=ray.intersectObjects(arm.parts,true);if(h&&h.length){openRobot(who);return}}const h=ray.intersectObjects([AMR.g],true);if(h&&h.length)openRobot('AMR')});
+
+function resize(){const w=innerWidth,h=innerHeight,a=w/h,wide=w>820,half=a<1?HALF*1.75:HALF,offX=wide?half*a*.26:0,offY=wide?-half*.06:-half*.36;
+  renderer.setSize(w,h,false);camera.left=-half*a-offX;camera.right=half*a-offX;camera.top=half+offY;camera.bottom=-half+offY;camera.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+let last=performance.now(),hudT=0,stT=0;
+function frame(now){requestAnimationFrame(frame);const dt=Math.min(64,now-last);last=now;const sdt=paused?0:dt/1000*speed;
+  sun2.visible=F.visible;sun.visible=!F.visible;if(sim)step(sdt);fleetStep(sdt*.85);animateRing(dt/1000);stepCam(dt);
+  [LD,PK].forEach(a=>{a.parts[0].position.x=a.base.x;a.parts[1].position.x=a.base.x;a.flash=Math.max(0,a.flash-dt/900);a.update()});AMR.g.position.set(AMR.x,0,AMR.z);
+  for(let i=packets.length-1;i>=0;i--){const p=packets[i];if(!paused)p.t+=dt;if(p.t<0)continue;const t=Math.min(1,p.t/p.ms),first=t<.5,u=first?t*2:(t-.5)*2,e=u*u*(3-2*u);
+    p.m.visible=true;p.m.position.lerpVectors(first?p.a:p.b,first?p.b:p.c,e);p.m.position.y+=Math.sin(e*Math.PI)*.15;if(t>=1){scene.remove(p.m);packets.splice(i,1)}}
+  dbNode.rotation.y+=dt*.0005;
+  if(now-hudT>150){hudT=now;if(scoreKind==='line')lineScore();else if(scoreKind==='fleet')fleetScore();updBeliefs();phone()}
+  if(now-stT>350){stT=now;if(tStat.PK.on&&sim){tStat.LD.set(`<b>Loader arm</b>${LD.status}`);tStat.PK.set(`<b>Picker arm</b>${PK.status}`);tStat.AMR.set(`<b>Mobile carrier</b>${AMR.status}`);tStat.LINE.set(`<b>Conveyor</b>belt at ${sim.v.toFixed(2)} m/s`)}}
+  inspTick(false);if(controls&&!cam)controls.update();placeTags();renderer.render(scene,camera)}
+go(0);camTo('wide',true);requestAnimationFrame(frame);
+window.__dbg={fAMRs,fArms,LEG,go,results,sim:()=>sim,FS,optimize,fleetReset,setSpeed:v=>{speed=v},startSim};
+})();
+</script>
