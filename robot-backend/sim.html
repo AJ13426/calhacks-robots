@@ -1,0 +1,271 @@
+<!doctype html>
+<!--
+  sim.html - the visual simulation, served at http://localhost:8000/sim
+
+  Every quarter second it asks the server for:
+    GET /world     -> where the blocks and robot arms are
+    GET /messages  -> what the robots have said
+  and draws it: a top-down table, two robot arms that glide to their
+  targets, speech bubbles, and a chat log.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Team Simulation</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262a33; --text: #e8eaed; --muted: #8b919c;
+    --red: #e5484d; --blue: #3e8ef7; --table: #2a2219; --table2: #33291e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { padding: 16px 24px; display: flex; align-items: baseline; gap: 16px;
+           border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 650; }
+  #task { color: var(--muted); }
+  #badge { margin-left: auto; font-size: 12px; padding: 4px 10px; border-radius: 99px;
+           background: #22262e; color: var(--muted); }
+  #badge.live { background: #14351f; color: #5fd38a; }
+  #badge.done { background: #1c2a45; color: #8fb8ff; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  canvas { display: block; width: 100%; height: auto; }
+  .robots { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+  .robot { padding: 12px 16px; }
+  .robot + .robot { border-left: 1px solid var(--line); }
+  .robot .name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .robot .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-top: 8px; }
+  .robot .vla { font-family: ui-monospace, Menlo, monospace; font-size: 13px; margin-top: 2px; }
+  .chat-head { padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  #chat { padding: 12px; display: flex; flex-direction: column; gap: 8px; height: 560px; overflow-y: auto; }
+  .msg { padding: 8px 12px; border-radius: 10px; background: #1f232b; border-left: 3px solid var(--muted);
+         animation: pop .25s ease-out; }
+  .msg.robot_a { border-left-color: var(--red); }
+  .msg.robot_b { border-left-color: var(--blue); }
+  .msg .who { font-size: 12px; color: var(--muted); }
+  .msg .who b { color: var(--text); }
+  .empty { color: var(--muted); text-align: center; margin-top: 40px; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Robot Team Simulation</h1>
+  <span id="task">Waiting for the simulation to start…</span>
+  <span id="badge">connecting</span>
+</header>
+<main>
+  <div class="card">
+    <canvas id="scene" width="1000" height="700"></canvas>
+    <div class="robots">
+      <div class="robot"><div class="name"><span class="dot" style="background:var(--red)"></span>robot_a</div>
+        <div class="label">VLA instruction</div><div class="vla" id="vla_robot_a">–</div></div>
+      <div class="robot"><div class="name"><span class="dot" style="background:var(--blue)"></span>robot_b</div>
+        <div class="label">VLA instruction</div><div class="vla" id="vla_robot_b">–</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="chat-head">Robot chat</div>
+    <div id="chat"><div class="empty">No messages yet</div></div>
+  </div>
+</main>
+
+<script>
+// ---- Setup -----------------------------------------------------------------
+// The world uses a 100 x 70 coordinate grid; we scale it to the canvas.
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+const S = canvas.width / 100;
+const COLORS = { red: "#e5484d", blue: "#3e8ef7" };
+const ROBOT_COLOR = { robot_a: COLORS.red, robot_b: COLORS.blue };
+
+let world = null;                 // latest snapshot from the server
+const shown = {};                 // where each gripper is drawn right now (animated)
+const lastSaid = {};              // robot -> {text, time} for speech bubbles
+let messageCount = 0;
+
+// ---- Ask the server for updates, 4 times a second --------------------------
+async function poll() {
+  try {
+    const [w, msgs] = await Promise.all([
+      fetch("/world").then(r => r.json()),
+      fetch("/messages").then(r => r.json()),
+    ]);
+    world = w;
+    updatePanels(msgs);
+    const badge = document.getElementById("badge");
+    if (!w.robots) { badge.textContent = "waiting for simulation"; badge.className = ""; }
+    else if (w.done) { badge.textContent = "task complete ✓"; badge.className = "done"; }
+    else { badge.textContent = "live · round " + w.round; badge.className = "live"; }
+  } catch (e) {
+    document.getElementById("badge").textContent = "server not reachable";
+    document.getElementById("badge").className = "";
+  }
+}
+setInterval(poll, 250);
+poll();
+
+function updatePanels(msgs) {
+  if (world && world.task) document.getElementById("task").textContent = "Task: " + world.task;
+  if (world && world.robots) {
+    for (const [id, r] of Object.entries(world.robots)) {
+      const el = document.getElementById("vla_" + id);
+      if (el) el.textContent = r.instruction || "–";
+    }
+  }
+  if (msgs.length < messageCount) {           // server was reset
+    messageCount = 0;
+    document.getElementById("chat").innerHTML = "";
+  }
+  const chat = document.getElementById("chat");
+  for (const m of msgs.slice(messageCount)) {
+    if (chat.querySelector(".empty")) chat.innerHTML = "";
+    const div = document.createElement("div");
+    div.className = "msg " + m.from;
+    div.innerHTML = '<div class="who"></div><div class="text"></div>';
+    const t = new Date(m.timestamp * 1000).toLocaleTimeString();
+    div.querySelector(".who").innerHTML = "<b></b> → " + escapeHtml(m.to) + " · " + t;
+    div.querySelector(".who b").textContent = m.from;
+    div.querySelector(".text").textContent = m.message;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    lastSaid[m.from] = { text: m.message, time: performance.now() };
+  }
+  messageCount = msgs.length;
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+// ---- Drawing ---------------------------------------------------------------
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+}
+
+function drawTable() {
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, "#33291e"); g.addColorStop(1, "#261e16");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // subtle wood grain lines
+  ctx.strokeStyle = "rgba(255,255,255,0.025)"; ctx.lineWidth = 2;
+  for (let y = 20; y < canvas.height; y += 28) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y + 6); ctx.stroke(); }
+}
+
+function drawBin(color, cx, cy, count) {
+  const w = 22 * S, h = 15 * S, x = cx * S - w / 2, y = cy * S - h / 2;
+  ctx.fillStyle = "rgba(0,0,0,0.35)"; roundRect(x + 4, y + 6, w, h, 14); ctx.fill();
+  ctx.fillStyle = "#1a1d23"; roundRect(x, y, w, h, 14); ctx.fill();
+  ctx.strokeStyle = COLORS[color]; ctx.lineWidth = 4; roundRect(x, y, w, h, 14); ctx.stroke();
+  ctx.fillStyle = COLORS[color]; ctx.font = "600 20px -apple-system, sans-serif"; ctx.textAlign = "center";
+  ctx.fillText(color.toUpperCase() + " BIN · " + count, cx * S, y - 12);
+}
+
+function drawBlock(color, x, y, lifted) {
+  const s = 5.5 * S;
+  ctx.fillStyle = "rgba(0,0,0," + (lifted ? 0.25 : 0.4) + ")";
+  roundRect(x * S - s / 2 + (lifted ? 10 : 3), y * S - s / 2 + (lifted ? 14 : 5), s, s, 8); ctx.fill();
+  const g = ctx.createLinearGradient(0, y * S - s / 2, 0, y * S + s / 2);
+  g.addColorStop(0, color === "red" ? "#ff6b6f" : "#6aa9ff");
+  g.addColorStop(1, COLORS[color]);
+  ctx.fillStyle = g; roundRect(x * S - s / 2, y * S - s / 2, s, s, 8); ctx.fill();
+}
+
+// A two-link arm: shoulder at the base, elbow computed so the hand reaches the gripper.
+function drawArm(id, base, hand, holdingColor) {
+  const color = ROBOT_COLOR[id] || "#aaa";
+  const L1 = 26, L2 = 26;
+  const bx = base[0], by = base[1];
+  const dx = hand[0] - bx, dy = hand[1] - by;
+  const reach = Math.max(1, Math.min(Math.hypot(dx, dy), L1 + L2 - 0.01));
+  const a = Math.atan2(dy, dx);
+  const bend = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + reach * reach - L2 * L2) / (2 * L1 * reach))));
+  // Two possible elbow positions; use the one nearer the middle of the table so it stays on screen.
+  const elbows = [a - bend, a + bend].map(t => [bx + L1 * Math.cos(t), by + L1 * Math.sin(t)]);
+  const [ex, ey] = elbows.sort((p, q) => Math.hypot(p[0] - 50, p[1] - 40) - Math.hypot(q[0] - 50, q[1] - 40))[0];
+
+  // base
+  ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.arc(bx * S + 4, by * S + 6, 5 * S, 0, 7); ctx.fill();
+  ctx.fillStyle = "#2b2f38"; ctx.beginPath(); ctx.arc(bx * S, by * S, 5 * S, 0, 7); ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.stroke();
+  // links
+  ctx.lineCap = "round";
+  for (const [w, c] of [[3.2 * S, "rgba(0,0,0,0.35)"], [2.4 * S, "#c9ced8"]]) {
+    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath();
+    ctx.moveTo(bx * S, by * S); ctx.lineTo(ex * S, ey * S); ctx.lineTo(hand[0] * S, hand[1] * S); ctx.stroke();
+  }
+  ctx.strokeStyle = color; ctx.lineWidth = 0.8 * S; ctx.beginPath();
+  ctx.moveTo(bx * S, by * S); ctx.lineTo(ex * S, ey * S); ctx.lineTo(hand[0] * S, hand[1] * S); ctx.stroke();
+  // joints
+  for (const [jx, jy, r] of [[bx, by, 2], [ex, ey, 1.6]]) {
+    ctx.fillStyle = "#1a1d23"; ctx.beginPath(); ctx.arc(jx * S, jy * S, r * S, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#c9ced8"; ctx.lineWidth = 3; ctx.stroke();
+  }
+  // held block, then the gripper on top of it
+  if (holdingColor) drawBlock(holdingColor, hand[0], hand[1], true);
+  ctx.strokeStyle = "#f2f4f7"; ctx.lineWidth = 5; ctx.lineCap = "round";
+  const open = holdingColor ? 3.3 : 4;
+  const ang = Math.atan2(hand[1] - ey, hand[0] - ex), px = -Math.sin(ang), py = Math.cos(ang);
+  for (const side of [1, -1]) {
+    const sx = hand[0] + px * open * side, sy = hand[1] + py * open * side;
+    ctx.beginPath(); ctx.moveTo((sx - Math.cos(ang) * 2) * S, (sy - Math.sin(ang) * 2) * S);
+    ctx.lineTo((sx + Math.cos(ang) * 3) * S, (sy + Math.sin(ang) * 3) * S); ctx.stroke();
+  }
+  // name tag
+  const outward = bx < 50 ? -1 : 1;  // label goes on the outer side of the base
+  ctx.fillStyle = color; ctx.font = "600 18px -apple-system, sans-serif"; ctx.textAlign = outward < 0 ? "right" : "left";
+  ctx.fillText(id, (bx + outward * 6.5) * S, (by + 0.7) * S);
+}
+
+function drawBubble(id, base) {
+  const said = lastSaid[id];
+  if (!said) return;
+  const age = (performance.now() - said.time) / 1000;
+  if (age > 3.5) return;
+  ctx.globalAlpha = Math.min(1, (3.5 - age) * 2);
+  ctx.font = "15px -apple-system, sans-serif";
+  const words = said.text.split(" "), lines = []; let line = "";
+  for (const w of words) { const t = line ? line + " " + w : w; if (ctx.measureText(t).width > 260) { lines.push(line); line = w; } else line = t; }
+  lines.push(line);
+  const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 24, h = lines.length * 20 + 16;
+  let x = base[0] * S - w / 2, y = (base[1] - 13) * S - h;
+  x = Math.max(8, Math.min(canvas.width - w - 8, x));
+  ctx.fillStyle = "rgba(255,255,255,0.95)"; roundRect(x, y, w, h, 12); ctx.fill();
+  ctx.strokeStyle = ROBOT_COLOR[id]; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = "#15171c"; ctx.textAlign = "left";
+  lines.forEach((l, i) => ctx.fillText(l, x + 12, y + 24 + i * 20));
+  ctx.globalAlpha = 1;
+}
+
+let lastFrame = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
+  drawTable();
+  if (!world || !world.robots) {
+    ctx.fillStyle = "#8b919c"; ctx.font = "22px -apple-system, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("Waiting for simulate.py to start…", canvas.width / 2, canvas.height / 2);
+    requestAnimationFrame(frame); return;
+  }
+  // bins
+  for (const [color, c] of Object.entries(world.bins)) {
+    drawBin(color, c[0], c[1], world.blocks.filter(b => b.where === "bin" && b.color === color).length);
+  }
+  // blocks on the table and in bins (held blocks are drawn with their arm)
+  for (const b of world.blocks) if (b.where !== "held") drawBlock(b.color, b.x, b.y, false);
+  // arms glide toward their target
+  for (const [id, r] of Object.entries(world.robots)) {
+    if (!shown[id]) shown[id] = [...r.target];
+    const k = 1 - Math.exp(-dt * 5);
+    shown[id][0] += (r.target[0] - shown[id][0]) * k;
+    shown[id][1] += (r.target[1] - shown[id][1]) * k;
+    const held = world.blocks.find(b => b.id === r.holding);
+    drawArm(id, r.base, shown[id], held ? held.color : null);
+  }
+  for (const [id, r] of Object.entries(world.robots)) drawBubble(id, r.base);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
